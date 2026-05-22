@@ -125,7 +125,7 @@ export const Footer: React.FC = () => {
           
           {/* Pill 1: TRAVELROCK */}
           <a
-            href="https://travelrock.com"
+            href="https://travelrock.com.ar"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center bg-[#09090b] border border-zinc-900 hover:border-orange-500/30 rounded-xl py-5 px-6 text-center shadow-sm hover:shadow-[0_0_15px_rgba(249,115,22,0.1)] transition-all duration-300 group"
