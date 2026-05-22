@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* SuperTour Theme: Default Dark */
+    --background: 0 0% 3%; /* Ultra black (#080808) */
+    --foreground: 0 0% 98%; /* Light gray (#fafafa) */
+
+    --card: 0 0% 6%; /* Deep gray charcoal (#0f0f0f) */
+    --card-foreground: 0 0% 98%;
+
+    --popover: 0 0% 6%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 48 96% 53%; /* Active yellow (#FACC15) */
+    --primary-foreground: 0 0% 0%; /* Black text for high contrast */
+
+    --secondary: 0 0% 12%; /* Charcoal gray (#1f1f1f) */
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 0 0% 16%;
+    --accent-foreground: 48 96% 53%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 48 96% 53%;
+    --warning-foreground: 0 0% 0%;
+
+    --border: 0 0% 15%; /* Border separator (#262626) */
+    --input: 0 0% 15%;
+    --ring: 48 96% 53%;
+
+    --radius: 1rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased selection:bg-primary selection:text-primary-foreground;
+    font-family: 'Inter', sans-serif;
+    background-color: #050505;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+}
+
+@layer utilities {
+  .shadow-premium {
+    box-shadow: 
+      0 0 1px rgba(250, 204, 21, 0.1),
+      0 4px 20px rgba(0, 0, 0, 0.6),
+      0 12px 40px rgba(0, 0, 0, 0.8);
+  }
+
+  .glass-card {
+    background: rgba(15, 15, 15, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .glass-card-hover {
+    @apply transition-all duration-300 hover:border-primary/40 hover:shadow-[0_0_20px_rgba(250,204,21,0.15)];
+  }
+
+  .glow-yellow {
+    box-shadow: 0 0 20px rgba(250, 204, 21, 0.3);
+  }
+
+  .glow-text-yellow {
+    text-shadow: 0 0 10px rgba(250, 204, 21, 0.5);
+  }
+
+  .transition-premium {
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #080808;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #222;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #FACC15;
+  }
+}
+
+/* Dynamic Calendar glow effect */
+.calendar-glow-day {
+  position: relative;
+}
+.calendar-glow-day::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #FACC15;
+  box-shadow: 0 0 6px #FACC15;
+}
