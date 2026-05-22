@@ -5,6 +5,7 @@ import { School, GalleryPhoto } from '../types/database';
 import { Navbar } from '../components/Navbar';
 import { PremiumGallery } from '../components/PremiumGallery';
 import { ArrowLeft, Download, Film, Users, Image as ImageIcon, MapPin, Calendar, Share2, Sparkles } from 'lucide-react';
+import { Footer } from '../components/Footer';
 
 export const SchoolDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -321,6 +322,7 @@ export const SchoolDetailPage: React.FC = () => {
           <PremiumGallery photos={photos} schoolName={school.name} />
         </section>
       </main>
+      <Footer />
     </div>
   );
 };
