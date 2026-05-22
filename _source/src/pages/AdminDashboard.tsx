@@ -17,8 +17,15 @@ import {
   Database,
   Info
 } from 'lucide-react';
+import { useSEO } from '../hooks/useSEO';
 
 export const AdminDashboard: React.FC = () => {
+  useSEO({
+    title: 'Consola de Administración — Panel Principal',
+    description: 'Gestión y control de galerías de fotos, videos de egresados e información de escuelas asociadas a SuperTourChannel.',
+    canonicalPath: '/admin'
+  });
+
   const [schools, setSchools] = useState<School[]>([]);
   const [activeSchoolId, setActiveSchoolId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

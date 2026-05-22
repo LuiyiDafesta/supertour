@@ -6,6 +6,7 @@ import { Navbar } from '../components/Navbar';
 import { PremiumGallery } from '../components/PremiumGallery';
 import { ArrowLeft, Download, Film, Users, Image as ImageIcon, MapPin, Calendar, Share2, Sparkles } from 'lucide-react';
 import { Footer } from '../components/Footer';
+import { useSEO } from '../hooks/useSEO';
 
 export const SchoolDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -14,6 +15,15 @@ export const SchoolDetailPage: React.FC = () => {
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [shareText, setShareText] = useState('Compartir');
+
+  useSEO({
+    title: school ? `Fotos de ${school.name}` : 'Cargando Galería',
+    description: school 
+      ? `Accedé a la galería premium de fotos y videos del viaje de egresados de ${school.name} a ${school.destination} con SuperTourChannel.`
+      : 'Accedé a tus fotos de viaje de egresados en alta definición.',
+    ogImage: school?.group_photo_web || '/st-logo-og.png',
+    canonicalPath: `/colegio/${id}`
+  });
 
   // Travel categories mock photos (Unsplash high quality) to show if DB is empty
   const mockPhotos: GalleryPhoto[] = [

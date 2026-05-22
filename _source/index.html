@@ -4,13 +4,42 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='0' y='0' width='100' height='100' rx='24' fill='%23000000'/><rect x='6' y='6' width='88' height='88' rx='20' fill='none' stroke='%23FACC15' stroke-width='5'/><text x='50' y='52' dominant-baseline='central' text-anchor='middle' font-family='Outfit, Inter, Arial Black, sans-serif' font-weight='900' font-size='48' letter-spacing='-2'><tspan fill='%23FFFFFF'>S</tspan><tspan fill='%23FACC15'>T</tspan></text></svg>" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    
     <title>SuperTourChannel — Fotos y Videos de tu Viaje de Egresados</title>
     <meta name="description" content="SuperTourChannel: reviví, compartí y descargá las fotos grupales e individuales de tu viaje de egresados de primaria a Mar del Plata y Villa Carlos Paz." />
     <meta name="author" content="SuperTourChannel" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://supertourchannel.com.ar/" />
     <meta property="og:title" content="SuperTourChannel — Fotos y Videos de tu Viaje de Egresados" />
     <meta property="og:description" content="SuperTourChannel: reviví, compartí y descargá las fotos grupales e individuales de tu viaje de egresados de primaria a Mar del Plata y Villa Carlos Paz." />
-    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/st-logo-og.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:type" content="image/png" />
+
+    <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://supertourchannel.com.ar/" />
+    <meta name="twitter:title" content="SuperTourChannel — Fotos y Videos de tu Viaje de Egresados" />
+    <meta name="twitter:description" content="SuperTourChannel: reviví, compartí y descargá las fotos grupales e individuales de tu viaje de egresados de primaria a Mar del Plata y Villa Carlos Paz." />
+    <meta name="twitter:image" content="/st-logo-og.png" />
+
+    <!-- Analytics & Tracking Fallbacks -->
+    <script>
+      // Safe dynamic trackers so analytics don't crash the React app if the scripts aren't fully loaded
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      window.gtag = window.gtag || gtag;
+      window.fbq = window.fbq || function(){
+        (window.fbq.q = window.fbq.q || []).push(arguments);
+      };
+      window.fbq.loaded = true;
+      window.fbq.version = '2.0';
+    </script>
   </head>
   <body class="bg-black text-white">
     <div id="root"></div>

@@ -3,8 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
 import { Lock, Mail, ShieldAlert, Sparkles, ArrowLeft } from 'lucide-react';
+import { useSEO } from '../hooks/useSEO';
 
 export const AdminLogin: React.FC = () => {
+  useSEO({
+    title: 'Iniciar Sesión — Panel Administrativo',
+    description: 'Acceso seguro al panel de administración de SuperTourChannel para gestionar escuelas, galerías de fotos y cargas de viajes.',
+    canonicalPath: '/login'
+  });
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
