@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Instagram, MessageCircle, PlayCircle, Youtube, X } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -12,6 +12,17 @@ export const Footer: React.FC = () => {
     mensaje: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const handleOpenModal = () => setIsModalOpen(true);
+    window.addEventListener('open-contact-modal', handleOpenModal);
+    (window as any).openContactModal = handleOpenModal;
+    
+    return () => {
+      window.removeEventListener('open-contact-modal', handleOpenModal);
+      delete (window as any).openContactModal;
+    };
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;

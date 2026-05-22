@@ -8,21 +8,46 @@ export const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [activeSection, setActiveSection] = useState<'inicio' | 'destinos' | 'nosotros' | null>('inicio');
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Scroll active section spy (only on Landing Page)
   useEffect(() => {
     const handleScroll = () => {
+      // 1. Navbar scrolled style toggler
       if (window.scrollY > 20) {
         setScrolled(true);
       } else {
         setScrolled(false);
       }
+
+      // 2. Active section highlighter
+      if (location.pathname !== '/') {
+        setActiveSection(null);
+        return;
+      }
+
+      const scrollPos = window.scrollY + 120; // 120px offset for optimal trigger distance
+      const destinosEl = document.getElementById('destinos');
+      const nosotrosEl = document.getElementById('nosotros');
+
+      const destinosOffset = destinosEl ? destinosEl.getBoundingClientRect().top + window.scrollY : 99999;
+      const nosotrosOffset = nosotrosEl ? nosotrosEl.getBoundingClientRect().top + window.scrollY : 99999;
+
+      if (scrollPos >= nosotrosOffset) {
+        setActiveSection('nosotros');
+      } else if (scrollPos >= destinosOffset) {
+        setActiveSection('destinos');
+      } else {
+        setActiveSection('inicio');
+      }
     };
 
     window.addEventListener('scroll', handleScroll);
+    handleScroll(); // Trigger once on mount/pathname change
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [location.pathname]);
 
   // Check auth state
   useEffect(() => {
@@ -51,6 +76,47 @@ export const Navbar: React.FC = () => {
     return location.pathname === path;
   };
 
+  const handleScrollToTopOrNavigate = (e: React.MouseEvent) => {
+    if (location.pathname === '/') {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleScrollToDestinos = (e: React.MouseEvent) => {
+    if (location.pathname === '/') {
+      e.preventDefault();
+      document.getElementById('destinos')?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      e.preventDefault();
+      navigate('/');
+      setTimeout(() => {
+        document.getElementById('destinos')?.scrollIntoView({ behavior: 'smooth' });
+      }, 150);
+    }
+  };
+
+  const handleScrollToNosotros = (e: React.MouseEvent) => {
+    if (location.pathname === '/') {
+      e.preventDefault();
+      document.getElementById('nosotros')?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      e.preventDefault();
+      navigate('/');
+      setTimeout(() => {
+        document.getElementById('nosotros')?.scrollIntoView({ behavior: 'smooth' });
+      }, 150);
+    }
+  };
+
+  const triggerContactModal = (e: React.MouseEvent) => {
+    e.preventDefault();
+    window.dispatchEvent(new Event('open-contact-modal'));
+    if (typeof (window as any).openContactModal === 'function') {
+      (window as any).openContactModal();
+    }
+  };
+
   return (
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
@@ -62,7 +128,7 @@ export const Navbar: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between">
           <div className="flex-shrink-0">
-            <Link to="/" className="flex items-center">
+            <Link to="/" onClick={handleScrollToTopOrNavigate} className="flex items-center">
               <Logo size="md" />
             </Link>
           </div>
@@ -71,29 +137,48 @@ export const Navbar: React.FC = () => {
           <div className="hidden md:flex items-center gap-8">
             <Link
               to="/"
+              onClick={handleScrollToTopOrNavigate}
               className={`text-sm font-black tracking-wide uppercase px-3 pt-1 pb-2 border-b-2 transition-all duration-200 ${
-                isActive('/') 
+                isActive('/') && activeSection === 'inicio'
                   ? 'text-primary border-primary glow-text-yellow' 
                   : 'text-zinc-300 border-transparent hover:text-white hover:border-zinc-700/50'
               }`}
             >
               Inicio
             </Link>
+            
             <a
               href="#destinos"
-              onClick={(e) => {
-                if (location.pathname !== '/') {
-                  e.preventDefault();
-                  navigate('/');
-                  setTimeout(() => {
-                    document.getElementById('destinos')?.scrollIntoView({ behavior: 'smooth' });
-                  }, 100);
-                }
-              }}
-              className="text-sm font-black tracking-wide uppercase px-3 pt-1 pb-2 border-b-2 border-transparent text-zinc-300 hover:text-white hover:border-zinc-700/50 transition-all duration-200"
+              onClick={handleScrollToDestinos}
+              className={`text-sm font-black tracking-wide uppercase px-3 pt-1 pb-2 border-b-2 transition-all duration-200 ${
+                isActive('/') && activeSection === 'destinos'
+                  ? 'text-primary border-primary glow-text-yellow' 
+                  : 'text-zinc-300 border-transparent hover:text-white hover:border-zinc-700/50'
+              }`}
             >
               Destinos
             </a>
+
+            <a
+              href="#nosotros"
+              onClick={handleScrollToNosotros}
+              className={`text-sm font-black tracking-wide uppercase px-3 pt-1 pb-2 border-b-2 transition-all duration-200 ${
+                isActive('/') && activeSection === 'nosotros'
+                  ? 'text-primary border-primary glow-text-yellow' 
+                  : 'text-zinc-300 border-transparent hover:text-white hover:border-zinc-700/50'
+              }`}
+            >
+              Nosotros
+            </a>
+
+            <a
+              href="#contacto"
+              onClick={triggerContactModal}
+              className="text-sm font-black tracking-wide uppercase px-3 pt-1 pb-2 border-b-2 border-transparent text-zinc-300 hover:text-white hover:border-zinc-700/50 transition-all duration-200"
+            >
+              Contacto
+            </a>
+
             {isAdmin ? (
               <>
                 <Link
@@ -147,29 +232,54 @@ export const Navbar: React.FC = () => {
         <div className="px-4 pt-2 pb-6 space-y-3">
           <Link
             to="/"
-            onClick={() => setIsOpen(false)}
+            onClick={(e) => {
+              setIsOpen(false);
+              handleScrollToTopOrNavigate(e);
+            }}
             className={`block px-3 py-2 rounded-md text-base font-semibold tracking-wide uppercase ${
-              isActive('/') ? 'text-primary bg-zinc-900/50' : 'text-zinc-300 hover:text-white'
+              isActive('/') && activeSection === 'inicio' ? 'text-primary bg-zinc-900/50' : 'text-zinc-300 hover:text-white'
             }`}
           >
             Inicio
           </Link>
+          
           <a
             href="#destinos"
             onClick={(e) => {
               setIsOpen(false);
-              if (location.pathname !== '/') {
-                e.preventDefault();
-                navigate('/');
-                setTimeout(() => {
-                  document.getElementById('destinos')?.scrollIntoView({ behavior: 'smooth' });
-                }, 100);
-              }
+              handleScrollToDestinos(e);
             }}
-            className="block px-3 py-2 rounded-md text-base font-semibold tracking-wide uppercase text-zinc-300 hover:text-white"
+            className={`block px-3 py-2 rounded-md text-base font-semibold tracking-wide uppercase ${
+              isActive('/') && activeSection === 'destinos' ? 'text-primary bg-zinc-900/50' : 'text-zinc-300 hover:text-white'
+            }`}
           >
             Destinos
           </a>
+
+          <a
+            href="#nosotros"
+            onClick={(e) => {
+              setIsOpen(false);
+              handleScrollToNosotros(e);
+            }}
+            className={`block px-3 py-2 rounded-md text-base font-semibold tracking-wide uppercase ${
+              isActive('/') && activeSection === 'nosotros' ? 'text-primary bg-zinc-900/50' : 'text-zinc-300 hover:text-white'
+            }`}
+          >
+            Nosotros
+          </a>
+
+          <a
+            href="#contacto"
+            onClick={(e) => {
+              setIsOpen(false);
+              triggerContactModal(e);
+            }}
+            className="block px-3 py-2 rounded-md text-base font-semibold tracking-wide uppercase text-zinc-300 hover:text-white"
+          >
+            Contacto
+          </a>
+
           {isAdmin ? (
             <>
               <Link
