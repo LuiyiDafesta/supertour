@@ -8,10 +8,10 @@ interface LogoProps {
 
 export const Logo: React.FC<LogoProps> = ({ size = 'md', showText = true, className = '' }) => {
   const dimensions = {
-    sm: { text: 'text-lg sm:text-xl' },
-    md: { text: 'text-2xl sm:text-3xl md:text-4xl' },
-    lg: { text: 'text-4xl sm:text-5xl md:text-6xl' },
-    xl: { text: 'text-6xl sm:text-7xl md:text-8xl' },
+    sm: { text: 'text-base sm:text-lg' },
+    md: { text: 'text-lg sm:text-xl md:text-[23px]' },
+    lg: { text: 'text-2xl sm:text-3xl md:text-4xl' },
+    xl: { text: 'text-4xl sm:text-5xl md:text-6xl' },
   };
 
   const current = dimensions[size];

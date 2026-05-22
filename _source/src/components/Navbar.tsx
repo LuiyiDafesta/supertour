@@ -71,7 +71,7 @@ export const Navbar: React.FC = () => {
           <div className="hidden md:flex items-center gap-8">
             <Link
               to="/"
-              className={`text-sm font-black tracking-wide uppercase pt-2 pb-4 border-b-[3px] transition-all duration-200 ${
+              className={`text-sm font-black tracking-wide uppercase px-3 pt-1 pb-2 border-b-2 transition-all duration-200 ${
                 isActive('/') 
                   ? 'text-primary border-primary glow-text-yellow' 
                   : 'text-zinc-300 border-transparent hover:text-white hover:border-zinc-700/50'
@@ -90,7 +90,7 @@ export const Navbar: React.FC = () => {
                   }, 100);
                 }
               }}
-              className="text-sm font-black tracking-wide uppercase pt-2 pb-4 border-b-[3px] border-transparent text-zinc-300 hover:text-white hover:border-zinc-700/50 transition-all duration-200"
+              className="text-sm font-black tracking-wide uppercase px-3 pt-1 pb-2 border-b-2 border-transparent text-zinc-300 hover:text-white hover:border-zinc-700/50 transition-all duration-200"
             >
               Destinos
             </a>
@@ -98,7 +98,7 @@ export const Navbar: React.FC = () => {
               <>
                 <Link
                   to="/admin"
-                  className={`flex items-center gap-1.5 text-sm font-black tracking-wide uppercase pt-2 pb-4 border-b-[3px] transition-all duration-200 ${
+                  className={`flex items-center gap-1.5 text-sm font-black tracking-wide uppercase px-3 pt-1 pb-2 border-b-2 transition-all duration-200 ${
                     isActive('/admin') 
                       ? 'text-primary border-primary glow-text-yellow' 
                       : 'text-zinc-300 border-transparent hover:text-white hover:border-zinc-700/50'
@@ -109,7 +109,7 @@ export const Navbar: React.FC = () => {
                 </Link>
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-1.5 text-sm font-black tracking-wide uppercase pt-2 pb-4 border-b-[3px] border-transparent text-red-400 hover:text-red-300 hover:border-red-500/30 transition-all duration-200"
+                  className="flex items-center gap-1.5 text-sm font-black tracking-wide uppercase px-3 pt-1 pb-2 border-b-2 border-transparent text-red-400 hover:text-red-300 hover:border-red-500/30 transition-all duration-200"
                 >
                   <LogOut size={16} />
                   Salir
