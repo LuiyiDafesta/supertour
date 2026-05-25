@@ -27,7 +27,8 @@ import {
   X,
   SlidersHorizontal,
   Mail,
-  Phone
+  Phone,
+  Eye
 } from 'lucide-react';
 import { useSEO } from '../hooks/useSEO';
 import { compressImage } from '../lib/imageCompressor';
@@ -98,21 +99,19 @@ export const AdminDashboard: React.FC = () => {
       created_at: '2026-05-22'
     },
     {
-      id: 'survey-3',
-      title: '¿Volverías a viajar con nosotros?',
-      description: 'Queremos saber si cumplimos tus expectativas en este viaje de egresados.',
-      question: '¿SuperTourChannel cumplió tus expectativas?',
-      answer_type: 'boolean',
-      active: false,
-      created_at: '2026-05-23'
     }
   ]);
   const [showSurveyModal, setShowSurveyModal] = useState(false);
+  const [editingSurvey, setEditingSurvey] = useState<any | null>(null);
   const [surveyTitle, setSurveyTitle] = useState('');
   const [surveyDescription, setSurveyDescription] = useState('');
   const [surveyQuestions, setSurveyQuestions] = useState<any[]>([
     { id: 'q-1', question: '', answer_type: 'text' }
   ]);
+
+  // Selected response details modal states
+  const [selectedResponse, setSelectedResponse] = useState<any | null>(null);
+  const [showResponseModal, setShowResponseModal] = useState(false);
 
   // Webhook states
   const [webhookUrl, setWebhookUrl] = useState('');
@@ -437,7 +436,7 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Manejador para crear una nueva encuesta (Supabase con fallback local)
+  // Manejador para crear o editar una encuesta (Supabase con fallback local)
   const handleCreateSurvey = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!surveyTitle.trim()) return;
@@ -449,7 +448,7 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
 
-    const newSurvey = {
+    const surveyData = {
       title: surveyTitle,
       description: surveyDescription || 'Por favor participá de esta encuesta del viaje.',
       questions: validQuestions,
@@ -457,36 +456,87 @@ export const AdminDashboard: React.FC = () => {
       question: validQuestions[0].question,
       answer_type: validQuestions[0].answer_type,
       options: [],
-      active: false
+      active: editingSurvey ? editingSurvey.active : false
     };
 
     try {
-      const { data, error } = await supabase
-        .from('surveys')
-        .insert(newSurvey)
-        .select()
-        .single();
-      if (error) throw error;
-      
-      setSurveys(prev => [data, ...prev]);
-      setSuccessMsg(`Encuesta "${surveyTitle}" creada correctamente en Supabase.`);
+      if (editingSurvey) {
+        // Editar encuesta existente
+        const { data, error } = await supabase
+          .from('surveys')
+          .update(surveyData)
+          .eq('id', editingSurvey.id)
+          .select()
+          .single();
+        if (error) throw error;
+        
+        setSurveys(prev => prev.map(s => s.id === editingSurvey.id ? data : s));
+        setSuccessMsg(`Encuesta "${surveyTitle}" actualizada correctamente en Supabase.`);
+      } else {
+        // Crear nueva encuesta
+        const { data, error } = await supabase
+          .from('surveys')
+          .insert(surveyData)
+          .select()
+          .single();
+        if (error) throw error;
+        
+        setSurveys(prev => [data, ...prev]);
+        setSuccessMsg(`Encuesta "${surveyTitle}" creada correctamente en Supabase.`);
+      }
     } catch (dbErr) {
       console.warn('No se pudo guardar la encuesta en la base de datos, guardando localmente:', dbErr);
-      const offlineSurvey = {
-        id: `survey-${Date.now()}`,
-        ...newSurvey,
-        created_at: new Date().toISOString().split('T')[0]
-      };
-      const updatedSurveys = [offlineSurvey, ...surveys];
-      setSurveys(updatedSurveys);
-      localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedSurveys));
-      setSuccessMsg(`[Modo Offline] Encuesta "${surveyTitle}" registrada localmente.`);
+      if (editingSurvey) {
+        const updatedOfflineSurveys = surveys.map(s => 
+          s.id === editingSurvey.id ? { ...s, ...surveyData } : s
+        );
+        setSurveys(updatedOfflineSurveys);
+        localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedOfflineSurveys));
+        setSuccessMsg(`[Modo Offline] Encuesta "${surveyTitle}" actualizada localmente.`);
+      } else {
+        const offlineSurvey = {
+          id: `survey-${Date.now()}`,
+          ...surveyData,
+          created_at: new Date().toISOString().split('T')[0]
+        };
+        const updatedSurveys = [offlineSurvey, ...surveys];
+        setSurveys(updatedSurveys);
+        localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedSurveys));
+        setSuccessMsg(`[Modo Offline] Encuesta "${surveyTitle}" registrada localmente.`);
+      }
     }
 
     setShowSurveyModal(false);
+    setEditingSurvey(null);
     setSurveyTitle('');
     setSurveyDescription('');
     setSurveyQuestions([{ id: 'q-1', question: '', answer_type: 'text' }]);
+  };
+
+  const openCreateSurveyModal = () => {
+    setEditingSurvey(null);
+    setSurveyTitle('');
+    setSurveyDescription('');
+    setSurveyQuestions([{ id: 'q-1', question: '', answer_type: 'text' }]);
+    setShowSurveyModal(true);
+  };
+
+  const openEditSurveyModal = (survey: any) => {
+    setEditingSurvey(survey);
+    setSurveyTitle(survey.title);
+    setSurveyDescription(survey.description || '');
+    if (survey.questions && Array.isArray(survey.questions) && survey.questions.length > 0) {
+      setSurveyQuestions(JSON.parse(JSON.stringify(survey.questions)));
+    } else {
+      setSurveyQuestions([
+        {
+          id: 'q-legacy',
+          question: survey.question || 'Dejanos tus comentarios:',
+          answer_type: survey.answer_type || 'text'
+        }
+      ]);
+    }
+    setShowSurveyModal(true);
   };
 
   // Manejador para activar/desactivar una encuesta
@@ -1401,31 +1451,26 @@ export const AdminDashboard: React.FC = () => {
                         disabled={savingWebhook}
                         className="px-4 py-2 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-[10px] uppercase tracking-wider transition-colors glow-yellow disabled:opacity-40 flex-shrink-0"
                       >
-                        {savingWebhook ? 'Guardando...' : 'Guardar'}
+                        {savingWebhook ? 'Guardando...' : 'Conectar Webhook'}
                       </button>
                     </form>
                   </div>
                 </div>
 
-                <div className="grid lg:grid-cols-12 gap-8 items-start">
+                <div className="space-y-8 select-none">
                   
-                  {/* LEFT COLUMN: LISTADO DE ENCUESTAS */}
-                  <div className="lg:col-span-6 space-y-6">
-                    <div className="flex justify-between items-center pb-3 border-b border-zinc-900">
+                  {/* SECCIÓN A: TABLA DE ENCUESTAS */}
+                  <div className="space-y-3.5">
+                    <div className="flex justify-between items-center pb-2.5 border-b border-zinc-900">
                       <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5 leading-none">
-                        <Sparkles size={14} className="text-primary" />
-                        Encuestas Creadas ({surveys.length})
+                        <Sparkles size={14} className="text-primary animate-pulse" />
+                        Cuestionarios de Satisfacción ({surveys.length})
                       </h3>
                       
                       <button
                         type="button"
-                        onClick={() => {
-                          setSurveyTitle('');
-                          setSurveyDescription('');
-                          setSurveyQuestions([{ id: 'q-1', question: '', answer_type: 'text' }]);
-                          setShowSurveyModal(true);
-                        }}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/95 text-black font-black text-[10px] uppercase tracking-wider transition-colors glow-yellow"
+                        onClick={openCreateSurveyModal}
+                        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-[10px] uppercase tracking-wider transition-colors glow-yellow"
                       >
                         <Plus size={12} />
                         Crear Encuesta
@@ -1433,245 +1478,268 @@ export const AdminDashboard: React.FC = () => {
                     </div>
 
                     {surveys.length === 0 ? (
-                      <div className="text-center py-20 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-600">
+                      <div className="text-center py-16 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-650">
                         <Sparkles size={24} className="mx-auto text-zinc-800 mb-2 animate-bounce" />
                         <p className="text-[10px] font-bold uppercase tracking-wider">No hay encuestas creadas en este momento</p>
+                        <button
+                          type="button"
+                          onClick={openCreateSurveyModal}
+                          className="mt-4 px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[9px] font-black uppercase tracking-wider text-white transition-colors"
+                        >
+                          Crear Primera Encuesta
+                        </button>
                       </div>
                     ) : (
-                      <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1 scrollbar-thin">
-                        {surveys.map((survey) => (
-                          <div key={survey.id} className={`p-4 rounded-xl border bg-zinc-950 flex flex-col justify-between transition-all duration-300 relative overflow-hidden group ${
-                            survey.active 
-                              ? 'border-primary shadow-[0_0_20px_rgba(250,204,21,0.04)]' 
-                              : 'border-zinc-850 hover:border-zinc-800'
-                          }`}>
-                            <div className="flex justify-between items-start mb-2 z-10">
-                              <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${
-                                survey.active 
-                                  ? 'bg-primary/20 border-primary/40 text-primary glow-yellow'
-                                  : 'bg-zinc-900 border-zinc-800 text-zinc-500'
-                              }`}>
-                                {survey.active ? 'Encuesta Activa' : 'Borrador / Inactiva'}
-                              </span>
+                      <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-lg select-none">
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-zinc-900">
+                            <thead>
+                              <tr className="bg-zinc-900/40 border-b border-zinc-900">
+                                <th className="px-6 py-4.5 text-left text-[9px] font-black text-zinc-500 uppercase tracking-widest">Título / Descripción</th>
+                                <th className="px-6 py-4.5 text-left text-[9px] font-black text-zinc-500 uppercase tracking-widest">Preguntas</th>
+                                <th className="px-6 py-4.5 text-center text-[9px] font-black text-zinc-500 uppercase tracking-widest">Estado</th>
+                                <th className="px-6 py-4.5 text-left text-[9px] font-black text-zinc-500 uppercase tracking-widest">WhatsApp / Copiar Enlace</th>
+                                <th className="px-6 py-4.5 text-right text-[9px] font-black text-zinc-500 uppercase tracking-widest">Acciones</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-900/80 bg-zinc-950/40">
+                              {surveys.map((survey) => {
+                                const qCount = survey.questions?.length || 1;
+                                return (
+                                  <tr key={survey.id} className="hover:bg-zinc-900/10 transition-colors">
+                                    {/* Título / Descripción */}
+                                    <td className="px-6 py-4.5">
+                                      <span className="block text-xs font-black uppercase text-white tracking-tight leading-snug">{survey.title}</span>
+                                      <span className="block text-[10px] text-zinc-500 font-semibold uppercase tracking-wide mt-1.5 max-w-md truncate" title={survey.description}>{survey.description}</span>
+                                    </td>
 
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleSurveyActive(survey.id)}
-                                  className={`px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all ${
-                                    survey.active 
-                                      ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-red-400' 
-                                      : 'bg-primary text-black border-primary font-black hover:bg-primary/90 glow-yellow'
-                                  }`}
-                                >
-                                  {survey.active ? 'Desactivar' : 'Activar'}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteSurvey(survey.id, survey.question)}
-                                  className="p-1 rounded-lg bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-900/60 text-zinc-500 hover:text-red-400 transition-colors"
-                                >
-                                  <Trash2 size={11} />
-                                </button>
-                              </div>
-                            </div>
-
-                            <h4 className="text-xs font-black uppercase text-white tracking-tight leading-snug">{survey.title}</h4>
-                            <p className="text-[9px] text-zinc-500 uppercase font-semibold leading-normal tracking-wide mt-1">{survey.description}</p>
-
-                            <div className="p-2.5 rounded-lg bg-zinc-900 border border-zinc-850 mt-3.5 space-y-3">
-                              <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none border-b border-zinc-800 pb-1.5 select-none">
-                                Cuestionario ({survey.questions?.length || 1} preguntas)
-                              </span>
-                              
-                              {survey.questions && Array.isArray(survey.questions) && survey.questions.length > 0 ? (
-                                <div className="space-y-2">
-                                  {survey.questions.map((q: any, qIdx: number) => (
-                                    <div key={q.id || qIdx} className="flex flex-col gap-1">
-                                      <span className="text-[10px] font-black uppercase text-zinc-300 leading-normal">
-                                        {qIdx + 1}. {q.question}
+                                    {/* Preguntas */}
+                                    <td className="px-6 py-4.5 whitespace-nowrap">
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-[9px] font-black text-zinc-300 uppercase tracking-wider">
+                                        <Sparkles size={11} className="text-primary" />
+                                        {qCount} {qCount === 1 ? 'Pregunta' : 'Preguntas'}
                                       </span>
-                                      <span className="self-start text-[7px] font-black text-primary uppercase tracking-widest px-2 py-0.5 rounded bg-primary/5 border border-primary/10 leading-none">
-                                        {q.answer_type === 'text' ? 'Texto Libre' : q.answer_type === 'number' ? 'Nota 1-10' : 'V/F'}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="flex flex-col gap-1">
-                                  <span className="text-[10px] font-black uppercase text-zinc-300 leading-normal">
-                                    1. {survey.question}
-                                  </span>
-                                  <span className="self-start text-[7px] font-black text-primary uppercase tracking-widest px-2 py-0.5 rounded bg-primary/5 border border-primary/10 leading-none">
-                                    {survey.answer_type === 'text' ? 'Texto Libre' : survey.answer_type === 'number' ? 'Nota 1-10' : 'V/F'}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
+                                    </td>
 
-                            {/* WhatsApp link picker */}
-                            <div className="mt-3.5 pt-3 border-t border-zinc-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                              <span className="font-bold text-zinc-500 uppercase tracking-wider text-[9px]">WhatsApp / Link:</span>
-                              <div className="flex items-center gap-1.5">
-                                <select
-                                  id={`school-link-select-${survey.id}`}
-                                  className="bg-zinc-900 border border-zinc-800 rounded-lg text-[9px] font-black uppercase text-zinc-300 px-2 py-1 focus:outline-none"
-                                >
-                                  <option value="">Enlace General (Sin Colegio)</option>
-                                  {schools.map(s => (
-                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                  ))}
-                                </select>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const sel = document.getElementById(`school-link-select-${survey.id}`) as HTMLSelectElement;
-                                    const sid = sel ? sel.value : '';
-                                    const baseUrl = window.location.origin;
-                                    const link = sid ? `${baseUrl}/encuesta/${survey.id}?schoolId=${sid}` : `${baseUrl}/encuesta/${survey.id}`;
-                                    navigator.clipboard.writeText(link);
-                                    alert('¡Enlace de WhatsApp copiado con éxito!');
-                                  }}
-                                  className="px-2.5 py-1 rounded-lg bg-primary hover:bg-primary/95 text-black font-black text-[9px] uppercase tracking-wider transition-colors glow-yellow"
-                                >
-                                  Copiar
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                                    {/* Estado */}
+                                    <td className="px-6 py-4.5 whitespace-nowrap text-center">
+                                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[8px] font-black uppercase tracking-wider select-none ${
+                                        survey.active
+                                          ? 'bg-emerald-950/60 border-emerald-900/40 text-emerald-400 glow-yellow'
+                                          : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                                      }`}>
+                                        {survey.active ? 'Activa' : 'Inactiva'}
+                                      </span>
+                                    </td>
+
+                                    {/* WhatsApp / Copiar Enlace */}
+                                    <td className="px-6 py-4.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                      <div className="flex items-center gap-2">
+                                        <select
+                                          id={`school-link-select-${survey.id}`}
+                                          className="bg-zinc-900 border border-zinc-800 rounded-lg text-[9px] font-black uppercase text-zinc-300 px-2 py-1.5 focus:outline-none"
+                                        >
+                                          <option value="">Enlace General (Sin Colegio)</option>
+                                          {schools.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                          ))}
+                                        </select>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const sel = document.getElementById(`school-link-select-${survey.id}`) as HTMLSelectElement;
+                                            const sid = sel ? sel.value : '';
+                                            const baseUrl = window.location.origin;
+                                            const link = sid ? `${baseUrl}/encuesta/${survey.id}?schoolId=${sid}` : `${baseUrl}/encuesta/${survey.id}`;
+                                            navigator.clipboard.writeText(link);
+                                            alert('¡Enlace de WhatsApp copiado con éxito!');
+                                          }}
+                                          className="px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary/95 text-black font-black text-[9px] uppercase tracking-wider transition-colors glow-yellow"
+                                        >
+                                          Copiar
+                                        </button>
+                                      </div>
+                                    </td>
+
+                                    {/* Acciones */}
+                                    <td className="px-6 py-4.5 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                                      <div className="flex items-center justify-end gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleSurveyActive(survey.id)}
+                                          className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all duration-200 ${
+                                            survey.active
+                                              ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-red-400'
+                                              : 'bg-primary text-black border-primary hover:bg-primary/90 glow-yellow'
+                                          }`}
+                                        >
+                                          {survey.active ? 'Desactivar' : 'Activar'}
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => openEditSurveyModal(survey)}
+                                          className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                                          title="Editar Encuesta"
+                                        >
+                                          <Edit size={12} />
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteSurvey(survey.id, survey.question)}
+                                          className="p-2 rounded-xl bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-900/60 text-zinc-500 hover:text-red-400 transition-colors"
+                                          title="Eliminar Encuesta"
+                                        >
+                                          <Trash2 size={12} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                   </div>
 
-                  {/* RIGHT COLUMN: INBOX EN VIVO DE RESPUESTAS (CRM INBOX) */}
-                  <div className="lg:col-span-6 space-y-6">
-                    <div className="flex justify-between items-center pb-3 border-b border-zinc-900">
+                  {/* SECCIÓN B: TABLA DE RESPUESTAS (CRM LEADS) */}
+                  <div className="space-y-3.5 pt-4">
+                    <div className="flex justify-between items-center pb-2.5 border-b border-zinc-900">
                       <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5 leading-none">
                         <Database size={14} className="text-primary animate-pulse" />
                         Bandeja de Entrada: Respuestas de Pasajeros
                       </h3>
-                      <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-zinc-500 tracking-widest">
-                        Total: {analyticsEvents.filter(e => e.event_type === 'survey_vote').length} leads
+                      <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-zinc-550 tracking-widest select-none">
+                        Total: {analyticsEvents.filter(e => e.event_type === 'survey_vote').length} Leads
                       </span>
                     </div>
 
                     {analyticsEvents.filter(e => e.event_type === 'survey_vote').length === 0 ? (
-                      <div className="text-center py-20 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-600">
+                      <div className="text-center py-20 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-650">
                         <ImageIcon size={24} className="mx-auto text-zinc-800 mb-2" />
                         <p className="text-[10px] font-bold uppercase tracking-wider">No se han recibido respuestas aún</p>
                         <p className="text-[8px] uppercase mt-1">Comparte un enlace de encuesta con tus pasajeros para recopilar leads.</p>
                       </div>
                     ) : (
-                      <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1 scrollbar-thin">
-                        {analyticsEvents
-                          .filter(e => e.event_type === 'survey_vote')
-                          .map((e, idx) => {
-                            // Parsea robustamente los metadatos de telemetría (soporta stringificados, nulos y legacy)
-                            let meta = e.metadata;
-                            if (meta && typeof meta === 'string') {
-                              try {
-                                meta = JSON.parse(meta);
-                              } catch (err) {
-                                meta = {};
-                              }
-                            }
-                            if (!meta) meta = {};
+                      <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-lg select-none">
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-zinc-900">
+                            <thead>
+                              <tr className="bg-zinc-900/40 border-b border-zinc-900">
+                                <th className="px-6 py-4.5 text-left text-[9px] font-black text-zinc-500 uppercase tracking-widest">Egresado / Nombre</th>
+                                <th className="px-6 py-4.5 text-left text-[9px] font-black text-zinc-500 uppercase tracking-widest">Contacto</th>
+                                <th className="px-6 py-4.5 text-left text-[9px] font-black text-zinc-500 uppercase tracking-widest">Colegio / Destino</th>
+                                <th className="px-6 py-4.5 text-left text-[9px] font-black text-zinc-500 uppercase tracking-widest">Respuestas</th>
+                                <th className="px-6 py-4.5 text-left text-[9px] font-black text-zinc-500 uppercase tracking-widest">Fecha</th>
+                                <th className="px-6 py-4.5 text-right text-[9px] font-black text-zinc-500 uppercase tracking-widest">Acción</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-900/80 bg-zinc-950/40">
+                              {analyticsEvents
+                                .filter(e => e.event_type === 'survey_vote')
+                                .map((e, idx) => {
+                                  // Parsea robustamente los metadatos de telemetría (soporta stringificados, nulos y legacy)
+                                  let meta = e.metadata;
+                                  if (meta && typeof meta === 'string') {
+                                    try {
+                                      meta = JSON.parse(meta);
+                                    } catch (err) {
+                                      meta = {};
+                                    }
+                                  }
+                                  if (!meta) meta = {};
 
-                            const name = meta.name || 'Pasajero Anónimo';
-                            const email = meta.email || 'No provisto';
-                            const phone = meta.phone || 'No provisto';
-                            
-                            // Extraer respuestas de forma de arreglo ultra-seguro
-                            let answers = meta.answers;
-                            if (answers && typeof answers === 'string') {
-                              try {
-                                answers = JSON.parse(answers);
-                              } catch (err) {
-                                answers = null;
-                              }
-                            }
-                            
-                            if (!answers || !Array.isArray(answers)) {
-                              answers = [
-                                {
-                                  question: meta.question || 'Pregunta general',
-                                  answer: meta.answer || 'No provisto',
-                                  answer_type: meta.answer_type || 'text'
-                                }
-                              ];
-                            }
-                            
-                            const matchedSch = schools.find(s => s.id === e.school_id);
-                            const schName = matchedSch ? matchedSch.name : 'General / Sin Colegio';
-                            const timestamp = e.created_at ? new Date(e.created_at).toLocaleString('es-AR') : 'Reciente';
-
-                            return (
-                              <div key={e.id || idx} className="p-4 rounded-xl border border-zinc-855 bg-zinc-950/40 hover:border-zinc-700 transition-colors space-y-3 shadow-md relative overflow-hidden group">
-                                <div className="absolute top-0 right-0 h-16 w-16 bg-primary/2 blur-lg pointer-events-none" />
-                                
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-900 pb-2">
-                                  <div>
-                                    <h4 className="text-xs font-black uppercase text-white leading-none">{name}</h4>
-                                    <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[9px] text-zinc-500 font-bold uppercase tracking-wider">
-                                      <span className="flex items-center gap-0.5 text-zinc-400 font-semibold"><Mail size={10} /> {email}</span>
-                                      {phone !== 'No provisto' && (
-                                        <span className="flex items-center gap-0.5 text-zinc-400 font-semibold"><Phone size={10} /> {phone}</span>
-                                      )}
-                                    </div>
-                                  </div>
+                                  const name = meta.name || 'Pasajero Anónimo';
+                                  const email = meta.email || 'No provisto';
+                                  const phone = meta.phone || 'No provisto';
                                   
-                                  <div className="text-right">
-                                    <span className="inline-block px-2 py-0.5 bg-zinc-900 border border-zinc-800 text-[8px] font-black uppercase text-zinc-400 rounded-md leading-none">{schName}</span>
-                                    <span className="block text-[7px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{timestamp}</span>
-                                  </div>
-                                </div>
+                                  // Extraer respuestas de forma de arreglo ultra-seguro
+                                  let answers = meta.answers;
+                                  if (answers && typeof answers === 'string') {
+                                    try {
+                                      answers = JSON.parse(answers);
+                                    } catch (err) {
+                                      answers = null;
+                                    }
+                                  }
+                                  
+                                  if (!answers || !Array.isArray(answers)) {
+                                    answers = [
+                                      {
+                                        question: meta.question || 'Pregunta general',
+                                        answer: meta.answer || 'No provisto',
+                                        answer_type: meta.answer_type || 'text'
+                                      }
+                                    ];
+                                  }
 
-                                <div className="space-y-3 pt-1 border-t border-zinc-900/40">
-                                  {answers.map((ans: any, aIdx: number) => (
-                                    <div key={aIdx} className="space-y-1">
-                                      <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none">
-                                        Pregunta #{aIdx + 1}: "{ans.question}"
-                                      </span>
-                                      
-                                      {ans.answer_type === 'text' && (
-                                        <p className="text-[10px] text-zinc-300 italic font-semibold leading-relaxed border-l-2 border-primary/40 pl-2 bg-zinc-900/30 py-1.5 rounded-r-lg uppercase">
-                                          "{ans.answer}"
-                                        </p>
-                                      )}
+                                  const matchedSch = schools.find(s => s.id === e.school_id);
+                                  const schName = matchedSch ? matchedSch.name : 'General / Sin Colegio';
+                                  const timestamp = e.created_at ? new Date(e.created_at).toLocaleString('es-AR') : 'Reciente';
 
-                                      {ans.answer_type === 'number' && (
-                                        <div className="flex items-center gap-2 py-0.5">
-                                          <span className="inline-flex items-center justify-center h-6.5 w-6.5 rounded-lg bg-primary text-black font-black text-[10px] glow-yellow">
-                                            {ans.answer}
-                                          </span>
-                                          <span className="text-[8px] font-black uppercase text-zinc-400 font-bold">Puntuación otorgada</span>
+                                  return (
+                                    <tr key={e.id || idx} className="hover:bg-zinc-900/10 transition-colors">
+                                      {/* Egresado */}
+                                      <td className="px-6 py-4.5 whitespace-nowrap">
+                                        <span className="block text-xs font-black uppercase text-white tracking-tight">{name}</span>
+                                      </td>
+
+                                      {/* Contacto */}
+                                      <td className="px-6 py-4.5 whitespace-nowrap">
+                                        <div className="flex flex-col gap-1 text-[10px] text-zinc-400 font-semibold leading-none">
+                                          <span className="flex items-center gap-1"><Mail size={10} className="text-primary" /> {email}</span>
+                                          {phone !== 'No provisto' && (
+                                            <span className="flex items-center gap-1.5"><Phone size={10} className="text-primary" /> {phone}</span>
+                                          )}
                                         </div>
-                                      )}
+                                      </td>
 
-                                      {ans.answer_type === 'boolean' && (
-                                        <div className="flex items-center gap-1.5 py-0.5">
-                                          <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
-                                            ans.answer === 'Verdadero' 
-                                              ? 'bg-emerald-950/60 border border-emerald-900/60 text-emerald-400 font-bold' 
-                                              : 'bg-red-950/60 border border-red-900/60 text-red-400 font-bold'
-                                          }`}>
-                                            {ans.answer}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
+                                      {/* Colegio / Destino */}
+                                      <td className="px-6 py-4.5 whitespace-nowrap">
+                                        <span className="block text-xs font-black uppercase text-zinc-300">{schName}</span>
+                                        <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest mt-1.5 leading-none">{e.destination || 'Carlos Paz'}</span>
+                                      </td>
+
+                                      {/* Respuestas */}
+                                      <td className="px-6 py-4.5 whitespace-nowrap">
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-[9px] font-black text-zinc-400 uppercase tracking-wider">
+                                          {answers.length} {answers.length === 1 ? 'Respuesta' : 'Respuestas'}
+                                        </span>
+                                      </td>
+
+                                      {/* Fecha */}
+                                      <td className="px-6 py-4.5 whitespace-nowrap">
+                                        <span className="block text-[10px] text-zinc-400 font-semibold leading-none">{timestamp}</span>
+                                      </td>
+
+                                      {/* Acción */}
+                                      <td className="px-6 py-4.5 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setSelectedResponse(e);
+                                            setShowResponseModal(true);
+                                          }}
+                                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-[10px] font-black uppercase tracking-wider text-white transition-colors"
+                                        >
+                                          <Eye size={12} className="text-primary" />
+                                          Ver Respuestas
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                   </div>
 
                 </div>
-
               </div>
             )}
 
@@ -2202,7 +2270,7 @@ export const AdminDashboard: React.FC = () => {
                             setSurveyQuestions(copy);
                           }}
                           placeholder={`Ej. ¿Cómo calificarías la excursión #${idx + 1}?`}
-                          className="w-full px-3 py-2 rounded-lg bg-zinc-955 border border-zinc-850 focus:border-primary/50 text-white text-[10px] font-semibold focus:outline-none"
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-955 border border-zinc-855 focus:border-primary/50 text-white text-[10px] font-semibold focus:outline-none"
                         />
                       </div>
 
@@ -2214,7 +2282,7 @@ export const AdminDashboard: React.FC = () => {
                             copy[idx].answer_type = e.target.value;
                             setSurveyQuestions(copy);
                           }}
-                          className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-850 text-zinc-300 text-[10px] font-bold focus:outline-none focus:border-primary"
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] font-bold focus:outline-none focus:border-primary"
                         >
                           <option value="text">Texto Libre (Comentarios y sugerencias)</option>
                           <option value="number">Numérica del 1 al 10 (Calificaciones)</option>
@@ -2239,10 +2307,171 @@ export const AdminDashboard: React.FC = () => {
                   type="submit"
                   className="px-6 py-3 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-colors glow-yellow"
                 >
-                  Crear Encuesta
+                  {editingSurvey ? 'Guardar Cambios' : 'Crear Encuesta'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE DETALLE DE RESPUESTA DEL PASAJERO */}
+      {showResponseModal && selectedResponse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity">
+          <div 
+            className="relative w-full max-w-xl border border-zinc-800 rounded-2xl bg-zinc-955 shadow-premium overflow-hidden transform transition-all flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header Modal */}
+            <div className="px-6 pt-5 pb-4 flex items-center justify-between border-b border-zinc-900 flex-shrink-0 select-none">
+              <div>
+                <h3 className="text-sm font-black uppercase text-white tracking-widest flex items-center gap-1.5 leading-none">
+                  <Database size={14} className="text-primary" />
+                  Detalle de Respuesta del Pasajero
+                </h3>
+                <span className="text-[8px] font-black uppercase block tracking-widest text-zinc-550 mt-1">CRM Lead Telemetría</span>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowResponseModal(false);
+                  setSelectedResponse(null);
+                }}
+                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Contenido */}
+            <div className="p-6 space-y-6 overflow-y-auto flex-1 scrollbar-thin">
+              
+              {/* Información Personal del Egresado */}
+              <div className="p-4 bg-zinc-900/60 border border-zinc-850 rounded-2xl space-y-3.5">
+                <span className="block text-[9px] font-black text-primary uppercase tracking-widest leading-none select-none">Datos Personales (Lead)</span>
+                
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none">Nombre Completo</span>
+                    <span className="block text-xs font-black uppercase text-white leading-none">
+                      {selectedResponse.metadata?.name || selectedResponse.metadata?.passenger_name || 'Pasajero Anónimo'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none">Email de Contacto</span>
+                    <span className="block text-xs font-semibold text-zinc-300 leading-none">
+                      {selectedResponse.metadata?.email || selectedResponse.metadata?.passenger_email || 'No provisto'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4 pt-2 border-t border-zinc-900">
+                  <div className="space-y-1">
+                    <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none">Teléfono Móvil</span>
+                    <span className="block text-xs font-semibold text-zinc-300 leading-none">
+                      {selectedResponse.metadata?.phone || selectedResponse.metadata?.passenger_phone || 'No provisto'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none">Fecha de Envío</span>
+                    <span className="block text-xs font-semibold text-zinc-300 leading-none">
+                      {selectedResponse.created_at ? new Date(selectedResponse.created_at).toLocaleString('es-AR') : 'Reciente'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-zinc-900 flex justify-between items-center text-[8px] font-bold text-zinc-550 uppercase tracking-wider">
+                  <span className="flex items-center gap-1">
+                    <MapPin size={10} className="text-primary" /> 
+                    {schools.find(s => s.id === selectedResponse.school_id)?.name || 'Sin Colegio'}
+                  </span>
+                  <span>Destino: {selectedResponse.destination || 'Villa Carlos Paz'}</span>
+                </div>
+              </div>
+
+              {/* Listado de Respuestas a la Encuesta */}
+              <div className="space-y-4">
+                <span className="block text-[9px] font-black text-primary uppercase tracking-widest leading-none select-none">Respuestas de la Encuesta</span>
+                
+                <div className="space-y-4">
+                  {(() => {
+                    let meta = selectedResponse.metadata;
+                    if (meta && typeof meta === 'string') {
+                      try {
+                        meta = JSON.parse(meta);
+                      } catch (err) {
+                        meta = {};
+                      }
+                    }
+                    if (!meta) meta = {};
+
+                    const answers = meta.answers || [
+                      {
+                        question: meta.question || 'Pregunta general',
+                        answer: meta.answer || 'No provisto',
+                        answer_type: meta.answer_type || 'text'
+                      }
+                    ];
+
+                    return answers.map((ans: any, idx: number) => (
+                      <div key={idx} className="p-4 bg-zinc-900/30 border border-zinc-850 rounded-xl space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5 select-none">
+                          <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Pregunta #{idx + 1}</span>
+                          <span className="text-[8px] font-black text-zinc-500 uppercase tracking-wider bg-zinc-900 border border-zinc-850 px-2 py-0.5 rounded-md leading-none">
+                            {ans.answer_type === 'text' ? 'Texto Libre' : ans.answer_type === 'number' ? 'Calificación (1-10)' : 'V/F'}
+                          </span>
+                        </div>
+
+                        <span className="block text-[11px] font-black uppercase text-white leading-normal">{ans.question}</span>
+
+                        <div className="pt-1 select-none">
+                          {ans.answer_type === 'text' && (
+                            <p className="text-xs text-zinc-300 italic font-semibold leading-relaxed border-l-2 border-primary/50 pl-3 bg-zinc-950/20 py-2 rounded-r-lg uppercase">
+                              "{ans.answer}"
+                            </p>
+                          )}
+
+                          {ans.answer_type === 'number' && (
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center justify-center h-8 w-8 rounded-xl bg-primary text-black font-black text-xs glow-yellow">
+                                {ans.answer}
+                              </span>
+                              <span className="text-[9px] font-black uppercase text-zinc-400 font-bold">Nota Otorgada</span>
+                            </div>
+                          )}
+
+                          {ans.answer_type === 'boolean' && (
+                            <span className={`inline-block px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+                              ans.answer === 'Verdadero' 
+                                ? 'bg-emerald-950/60 border border-emerald-900/60 text-emerald-400 font-bold' 
+                                : 'bg-red-950/60 border border-red-900/60 text-red-400 font-bold'
+                            }`}>
+                              {ans.answer}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Footer Modal */}
+            <div className="px-6 py-4 flex justify-end border-t border-zinc-900 flex-shrink-0 select-none">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResponseModal(false);
+                  setSelectedResponse(null);
+                }}
+                className="px-6 py-3 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-colors glow-yellow"
+              >
+                Cerrar Detalles
+              </button>
+            </div>
           </div>
         </div>
       )}

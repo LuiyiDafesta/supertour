@@ -194,7 +194,8 @@ export const SurveyPage: React.FC = () => {
       }
     });
 
-    // 2. Intentar disparar webhook a n8n si está configurado en supertour_settings
+    // 2. Intentar disparar webhook a n8n si está configurado en supertour_settings o local storage
+    let targetWebhookUrl = '';
     try {
       const { data: webhookSetting } = await supabase
         .from('supertour_settings')
@@ -203,22 +204,32 @@ export const SurveyPage: React.FC = () => {
         .maybeSingle();
 
       if (webhookSetting && webhookSetting.value && webhookSetting.value.trim() !== '') {
-        console.log('[SuperTour CRM] Disparando webhook de CRM en segundo plano:', webhookSetting.value);
-        
-        // Disparar POST en segundo plano (silencioso para evitar bloqueos CORS)
-        fetch(webhookSetting.value, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload),
-          mode: 'no-cors' // Evita que problemas de CORS de servidores ajenos rompan la UX
-        }).catch(webhookErr => {
-          console.warn('Falla silenciosa del webhook de n8n:', webhookErr);
-        });
+        targetWebhookUrl = webhookSetting.value;
       }
     } catch (webhookSettingErr) {
       console.warn('No se pudo leer la configuración de webhook de Supabase:', webhookSettingErr);
+    }
+
+    // Fallback de local storage para entornos locales/desarrollo offline
+    if (!targetWebhookUrl) {
+      targetWebhookUrl = localStorage.getItem('supertour_webhook_url') || '';
+    }
+
+    if (targetWebhookUrl && targetWebhookUrl.trim() !== '') {
+      console.log('[SuperTour CRM] Disparando webhook de CRM:', targetWebhookUrl);
+      
+      // Enviar POST con JSON. Usamos 'cors' para asegurar el header application/json.
+      // Si el servidor de n8n no tiene cabeceras CORS, el navegador reportará un error CORS en la consola
+      // pero la petición POST de todas formas llega al servidor de n8n y se ejecuta con éxito.
+      fetch(targetWebhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      }).catch(webhookErr => {
+        console.warn('Error en la llamada del webhook de n8n:', webhookErr);
+      });
     }
 
     // 3. Registrar en local storage del pasajero para evitar re-voto
