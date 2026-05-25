@@ -23,7 +23,6 @@ interface UploaderProps {
 export const Uploader: React.FC<UploaderProps> = ({ schoolId, onUploadComplete }) => {
   const [queue, setQueue] = useState<FileQueueItem[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [globalCategory, setGlobalCategory] = useState<'Excursiones' | 'Fiestas' | 'Actividades' | 'Grupal'>('Excursiones');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Add files to the upload queue
@@ -39,7 +38,7 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, onUploadComplete }
         size: file.size,
         progress: 0,
         status: 'esperando',
-        category: globalCategory,
+        category: 'Grupal',
         previewUrl: URL.createObjectURL(file),
       };
     });
@@ -64,23 +63,6 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, onUploadComplete }
       if (item) URL.revokeObjectURL(item.previewUrl);
       return prev.filter((x) => x.id !== id);
     });
-  };
-
-  // Change category of single file
-  const handleChangeCategory = (id: string, category: 'Excursiones' | 'Fiestas' | 'Actividades' | 'Grupal') => {
-    setQueue((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, category } : item))
-    );
-  };
-
-  // Update global category and apply to all waiting files
-  const handleGlobalCategoryChange = (category: 'Excursiones' | 'Fiestas' | 'Actividades' | 'Grupal') => {
-    setGlobalCategory(category);
-    setQueue((prev) =>
-      prev.map((item) =>
-        item.status === 'esperando' ? { ...item, category } : item
-      )
-    );
   };
 
   // Clear entire queue
@@ -282,22 +264,6 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, onUploadComplete }
                 <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Resumen de cola de archivos y tamaño acumulado</p>
               </div>
             </div>
-
-            {/* Global Category quick override */}
-            <div className="flex items-center gap-3 bg-zinc-950/80 p-1.5 rounded-lg border border-zinc-800/60 w-full sm:w-auto">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider pl-2">Categoría Global</span>
-              <select
-                value={globalCategory}
-                disabled={uploading}
-                onChange={(e) => handleGlobalCategoryChange(e.target.value as any)}
-                className="bg-zinc-900 border border-zinc-800 rounded-md text-xs font-bold text-white p-1 focus:outline-none focus:border-primary"
-              >
-                <option value="Excursiones">Excursiones</option>
-                <option value="Fiestas">Fiestas</option>
-                <option value="Actividades">Actividades</option>
-                <option value="Grupal">Grupal</option>
-              </select>
-            </div>
           </div>
 
           {/* Premium stats grid */}
@@ -360,22 +326,9 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, onUploadComplete }
                   </div>
                 </div>
 
-                {/* Progress & Category settings */}
+                {/* Progress & Actions */}
                 <div className="flex items-center gap-4 flex-shrink-0">
                   
-                  {/* Category picker for file */}
-                  <select
-                    value={item.category}
-                    disabled={uploading || item.status === 'exito'}
-                    onChange={(e) => handleChangeCategory(item.id, e.target.value as any)}
-                    className="bg-zinc-950 border border-zinc-800 text-[10px] font-bold text-zinc-300 rounded p-1 focus:outline-none focus:border-primary"
-                  >
-                    <option value="Excursiones">Excursiones</option>
-                    <option value="Fiestas">Fiestas</option>
-                    <option value="Actividades">Actividades</option>
-                    <option value="Grupal">Grupal</option>
-                  </select>
-
                   {/* Status Indicator */}
                   <div className="w-24 text-right">
                     {item.status === 'esperando' && (

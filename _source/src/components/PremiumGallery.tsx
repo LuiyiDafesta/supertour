@@ -14,7 +14,7 @@ import {
   ZoomOut, 
   Check, 
   Copy,
-  Layers
+  Sparkles
 } from 'lucide-react';
 
 interface PremiumGalleryProps {
@@ -23,9 +23,7 @@ interface PremiumGalleryProps {
 }
 
 export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolName }) => {
-  const [activeCategory, setActiveCategory] = useState<string>('Todos');
   const [columnCount, setColumnCount] = useState<number>(3); // Default 3 columns
-  const [filteredPhotos, setFilteredPhotos] = useState<GalleryPhoto[]>(photos);
   
   // Lightbox State
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -33,30 +31,19 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [shareSuccess, setShareSuccess] = useState<boolean>(false);
 
-  // Sync / Filter photos
-  useEffect(() => {
-    if (activeCategory === 'Todos') {
-      setFilteredPhotos(photos);
-    } else {
-      setFilteredPhotos(photos.filter(photo => photo.category === activeCategory));
-    }
-  }, [activeCategory, photos]);
-
-  const categories = ['Todos', 'Grupal', 'Excursiones', 'Fiestas', 'Actividades'];
-
   // Handle Lightbox Navigation
   const handlePrev = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (lightboxIndex === null) return;
     setIsZoomed(false);
-    setLightboxIndex(prev => (prev !== null && prev > 0 ? prev - 1 : filteredPhotos.length - 1));
+    setLightboxIndex(prev => (prev !== null && prev > 0 ? prev - 1 : photos.length - 1));
   };
 
   const handleNext = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (lightboxIndex === null) return;
     setIsZoomed(false);
-    setLightboxIndex(prev => (prev !== null && prev < filteredPhotos.length - 1 ? prev + 1 : 0));
+    setLightboxIndex(prev => (prev !== null && prev < photos.length - 1 ? prev + 1 : 0));
   };
 
   // Keyboard navigation for lightbox
@@ -70,7 +57,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [lightboxIndex, filteredPhotos]);
+  }, [lightboxIndex, photos]);
 
   // Copy photo link
   const copyPhotoLink = async (photoUrl: string, id: string, e?: React.MouseEvent) => {
@@ -107,27 +94,9 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
 
   return (
     <div className="w-full py-12 select-none">
-      {/* Gallery Controls (Category Filters & Grid column switches) */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-10 pb-6 border-b border-zinc-900">
+      {/* Gallery Controls (Grid column switches) */}
+      <div className="flex justify-end gap-6 mb-10 pb-6 border-b border-zinc-900">
         
-        {/* Category Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-3 md:pb-0 scrollbar-none max-w-full">
-          <Layers size={16} className="text-zinc-500 mr-1 flex-shrink-0" />
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 flex-shrink-0 ${
-                activeCategory === cat
-                  ? 'bg-primary text-black font-black shadow-[0_0_15px_rgba(250,204,21,0.2)]'
-                  : 'bg-zinc-900/60 text-zinc-400 border border-zinc-800/80 hover:bg-zinc-900 hover:text-white hover:border-zinc-700'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
         {/* View toggles (Columns count selector) */}
         <div className="hidden sm:flex items-center gap-3 bg-zinc-900/50 p-1 rounded-xl border border-zinc-800/60">
           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2.5">Columnas</span>
@@ -171,25 +140,25 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
       </div>
 
       {/* Empty State */}
-      {filteredPhotos.length === 0 ? (
+      {photos.length === 0 ? (
         <div className="text-center py-20 px-6 border border-zinc-900 bg-zinc-950/20 rounded-2xl">
           <p className="text-zinc-500 text-sm font-bold uppercase tracking-wider">
-            No hay fotos en esta categoría actualmente.
+            No hay fotos en esta galería actualmente.
           </p>
         </div>
       ) : (
         /* Dynamic Grid Layout */
         <div className={`grid ${getGridColsClass()} gap-6 transition-all duration-500`}>
-          {filteredPhotos.map((photo, index) => (
+          {photos.map((photo, index) => (
             <div
               key={photo.id}
               onClick={() => setLightboxIndex(index)}
               className="group relative aspect-square bg-zinc-900/50 rounded-xl overflow-hidden border border-zinc-900 cursor-zoom-in shadow-md hover:shadow-[0_8px_30px_rgba(0,0,0,0.8)] hover:border-primary/20 transition-all duration-300"
             >
-              {/* Blur-up wrapper */}
+              {/* Image element */}
               <img
                 src={photo.url_web}
-                alt={`${schoolName} - ${photo.category}`}
+                alt={`${schoolName} - Recuerdos`}
                 loading="lazy"
                 className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
               />
@@ -197,10 +166,10 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
               {/* Hover Dark Overlay Shield */}
               <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-zinc-950/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4" style={{ pointerEvents: 'auto' }}>
                 
-                {/* Top card bar (Category badge) */}
+                {/* Top card bar (Brand watermark) */}
                 <div className="flex justify-between items-start">
                   <span className="text-[9px] font-black text-black bg-primary px-2.5 py-0.5 rounded-full uppercase tracking-wider glow-yellow font-outfit">
-                    {photo.category}
+                    SuperTour
                   </span>
                   
                   {/* Share action floating button */}
@@ -270,10 +239,10 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
             onClick={(e) => e.stopPropagation()}
           >
             <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-              {schoolName} • Foto {lightboxIndex + 1} de {filteredPhotos.length}
+              {schoolName} • Foto {lightboxIndex + 1} de {photos.length}
             </span>
-            <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full uppercase tracking-wider">
-              {filteredPhotos[lightboxIndex].category}
+            <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+              <Sparkles size={10} /> SuperTour
             </span>
           </div>
 
@@ -294,7 +263,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
 
             {/* Share action */}
             <button
-              onClick={(e) => copyPhotoLink(filteredPhotos[lightboxIndex].url_hd, 'lightbox-copy', e)}
+              onClick={(e) => copyPhotoLink(photos[lightboxIndex].url_hd, 'lightbox-copy', e)}
               className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-zinc-950/60 hover:bg-zinc-900 text-white text-xs font-bold uppercase tracking-wider transition-all"
             >
               {copiedId === 'lightbox-copy' ? <Check size={12} className="text-primary" /> : <Copy size={12} />}
@@ -302,7 +271,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
             </button>
 
             <button
-              onClick={(e) => shareOnWhatsApp(filteredPhotos[lightboxIndex].url_hd, e)}
+              onClick={(e) => shareOnWhatsApp(photos[lightboxIndex].url_hd, e)}
               className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-zinc-950/60 hover:bg-zinc-900 text-white text-xs font-bold uppercase tracking-wider transition-all"
             >
               <Share2 size={12} />
@@ -312,7 +281,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
 
             {/* Download HD trigger */}
             <a
-              href={filteredPhotos[lightboxIndex].url_hd}
+              href={photos[lightboxIndex].url_hd}
               download={`SuperTour-${schoolName}-${lightboxIndex + 1}.jpg`}
               target="_blank"
               rel="noopener noreferrer"
@@ -333,7 +302,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
           
           <button
             onClick={handleNext}
-            className="absolute right-4 sm:right-8 z-[110] p-3 rounded-full bg-zinc-900/60 hover:bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 transition-all"
+            className="absolute right-4 sm:left-auto sm:right-8 z-[110] p-3 rounded-full bg-zinc-900/60 hover:bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 transition-all"
           >
             <ChevronRight size={24} />
           </button>
@@ -344,7 +313,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={filteredPhotos[lightboxIndex].url_hd}
+              src={photos[lightboxIndex].url_hd}
               alt={`${schoolName} - Lightbox`}
               className={`max-w-full max-h-full object-contain rounded-lg transition-transform duration-300 ${
                 isZoomed ? 'scale-150 cursor-zoom-out' : 'scale-100 cursor-zoom-in'
