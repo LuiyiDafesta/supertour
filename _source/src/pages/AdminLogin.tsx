@@ -44,16 +44,7 @@ export const AdminLogin: React.FC = () => {
 
       navigate('/admin');
     } catch (err: any) {
-      // Fallback for demonstration/offline mode: let them login with standard test credentials!
-      // This is a premium touch: it lets the user test the dashboard IMMEDIATELY without setting up users in Supabase Auth first!
-      if (email === 'admin@supertour.com' && password === 'admin123') {
-        console.warn('Simulating successful offline login for testing.');
-        // We will mock writing session info (in a real app, Supabase will handle this)
-        // For testing purposes, we can navigate directly
-        navigate('/admin');
-      } else {
-        setError(err.message || 'Credenciales inválidas');
-      }
+      setError(err.message || 'Credenciales inválidas');
     } finally {
       setLoading(false);
     }
@@ -148,15 +139,6 @@ export const AdminLogin: React.FC = () => {
           </button>
         </form>
 
-        {/* Demo Helper message */}
-        <div className="mt-8 text-center border-t border-zinc-900 pt-6">
-          <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-            Modo de Prueba Local Activo
-          </p>
-          <p className="text-[10px] text-zinc-600 mt-1 leading-normal">
-            Podés usar <code className="text-primary font-bold">admin@supertour.com</code> y contraseña <code className="text-primary font-bold">admin123</code> para ingresar de forma offline sin configurar la base de datos previamente.
-          </p>
-        </div>
       </div>
       
       {/* Dynamic Keyframes for error alert shaking */}
