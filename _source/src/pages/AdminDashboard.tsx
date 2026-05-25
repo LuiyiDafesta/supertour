@@ -852,8 +852,18 @@ export const AdminDashboard: React.FC = () => {
     let mobileCount = 0;
     let desktopCount = 0;
     analyticsEvents.forEach(e => {
-      if (e.metadata && e.metadata.device) {
-        if (e.metadata.device === 'mobile') mobileCount++;
+      let meta = e.metadata;
+      if (meta && typeof meta === 'string') {
+        try {
+          meta = JSON.parse(meta);
+        } catch (err) {
+          meta = {};
+        }
+      }
+      if (!meta) meta = {};
+
+      if (meta.device) {
+        if (meta.device === 'mobile') mobileCount++;
         else desktopCount++;
       } else {
         // Fallback pro-rata
@@ -1555,18 +1565,40 @@ export const AdminDashboard: React.FC = () => {
                         {analyticsEvents
                           .filter(e => e.event_type === 'survey_vote')
                           .map((e, idx) => {
-                            const name = e.metadata?.name || 'Pasajero Anónimo';
-                            const email = e.metadata?.email || 'No provisto';
-                            const phone = e.metadata?.phone || 'No provisto';
-                            
-                            // Si existen múltiples respuestas las extraemos, sino caemos en el fallback backward compatible
-                            const answers = e.metadata?.answers || [
-                              {
-                                question: e.metadata?.question || 'Pregunta general',
-                                answer: e.metadata?.answer || 'No provisto',
-                                answer_type: e.metadata?.answer_type || 'text'
+                            // Parsea robustamente los metadatos de telemetría (soporta stringificados, nulos y legacy)
+                            let meta = e.metadata;
+                            if (meta && typeof meta === 'string') {
+                              try {
+                                meta = JSON.parse(meta);
+                              } catch (err) {
+                                meta = {};
                               }
-                            ];
+                            }
+                            if (!meta) meta = {};
+
+                            const name = meta.name || 'Pasajero Anónimo';
+                            const email = meta.email || 'No provisto';
+                            const phone = meta.phone || 'No provisto';
+                            
+                            // Extraer respuestas de forma de arreglo ultra-seguro
+                            let answers = meta.answers;
+                            if (answers && typeof answers === 'string') {
+                              try {
+                                answers = JSON.parse(answers);
+                              } catch (err) {
+                                answers = null;
+                              }
+                            }
+                            
+                            if (!answers || !Array.isArray(answers)) {
+                              answers = [
+                                {
+                                  question: meta.question || 'Pregunta general',
+                                  answer: meta.answer || 'No provisto',
+                                  answer_type: meta.answer_type || 'text'
+                                }
+                              ];
+                            }
                             
                             const matchedSch = schools.find(s => s.id === e.school_id);
                             const schName = matchedSch ? matchedSch.name : 'General / Sin Colegio';
