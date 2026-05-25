@@ -71,6 +71,39 @@ export const AdminDashboard: React.FC = () => {
   const [videoProgress, setVideoProgress] = useState(0);
   const [videoStatus, setVideoStatus] = useState<string | null>(null);
 
+  // Tab Selector State
+  const [activeTab, setActiveTab] = useState<'colegios' | 'encuestas' | 'metricas'>('colegios');
+
+  // Survey States & Initial Mock Data
+  const [surveys, setSurveys] = useState<any[]>([
+    {
+      id: 'survey-1',
+      question: '¿Cuál fue la excursión más emocionante del viaje?',
+      options: [
+        { text: 'Parque de Aventura Pekos', votes: 145 },
+        { text: 'Aerosilla Carlos Paz', votes: 89 },
+        { text: 'Rafting en el Río Suquía', votes: 202 },
+        { text: 'Senderismo en las Sierras', votes: 41 }
+      ],
+      active: true,
+      created_at: '2026-05-20'
+    },
+    {
+      id: 'survey-2',
+      question: '¿Qué boliche / matiné premium tuvo la mejor fiesta?',
+      options: [
+        { text: 'Khalama Disco', votes: 312 },
+        { text: 'Keops El Templo', votes: 278 },
+        { text: 'Molino Rojo', votes: 198 }
+      ],
+      active: false,
+      created_at: '2026-05-22'
+    }
+  ]);
+  const [showSurveyModal, setShowSurveyModal] = useState(false);
+  const [surveyQuestion, setSurveyQuestion] = useState('');
+  const [surveyOptions, setSurveyOptions] = useState<string[]>(['', '', '', '']);
+
   // Alert/Status States
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -309,6 +342,62 @@ export const AdminDashboard: React.FC = () => {
     } finally {
       setVideoUploading(false);
     }
+  };
+
+  // Manejador para crear una nueva encuesta localmente
+  const handleCreateSurvey = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!surveyQuestion.trim()) return;
+
+    const newSurvey = {
+      id: `survey-${Date.now()}`,
+      question: surveyQuestion,
+      options: surveyOptions.filter(o => o.trim() !== '').map(o => ({ text: o, votes: 0 })),
+      active: false,
+      created_at: new Date().toISOString().split('T')[0]
+    };
+    setSurveys(prev => [newSurvey, ...prev]);
+    setShowSurveyModal(false);
+    setSurveyQuestion('');
+    setSurveyOptions(['', '', '', '']);
+    setSuccessMsg(`Encuesta "${newSurvey.question}" creada correctamente.`);
+  };
+
+  // Manejador para activar/desactivar una encuesta
+  const handleToggleSurveyActive = (id: string) => {
+    setSurveys(prev => prev.map(s => {
+      if (s.id === id) {
+        const nextState = !s.active;
+        if (nextState) {
+          setSuccessMsg(`Encuesta "${s.question}" activada para los pasajeros.`);
+        }
+        return { ...s, active: nextState };
+      }
+      // Desactivamos todas las demás para que solo haya 1 activa a la vez
+      return { ...s, active: false };
+    }));
+  };
+
+  // Manejador para eliminar una encuesta
+  const handleDeleteSurvey = (id: string, question: string) => {
+    if (!window.confirm(`¿Estás seguro de eliminar la encuesta "${question}"?`)) return;
+    setSurveys(prev => prev.filter(s => s.id !== id));
+    setSuccessMsg('Encuesta eliminada con éxito del panel.');
+  };
+
+  // Manejador para simular un voto en una encuesta
+  const handleSimulateVote = (surveyId: string, optionIndex: number) => {
+    setSurveys(prev => prev.map(s => {
+      if (s.id === surveyId) {
+        const updatedOptions = [...s.options];
+        updatedOptions[optionIndex] = {
+          ...updatedOptions[optionIndex],
+          votes: updatedOptions[optionIndex].votes + 1
+        };
+        return { ...s, options: updatedOptions };
+      }
+      return s;
+    }));
   };
 
   // Guardar (Crear o Editar) Colegio
@@ -642,200 +731,530 @@ export const AdminDashboard: React.FC = () => {
           /* VISTA B: TABLA DE COLEGIOS PRINCIPAL */
           <div className="space-y-6">
             
-            {/* Panel de Filtros y Buscador */}
-            <div className="bg-zinc-950/80 border border-zinc-850 p-4 sm:p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-              
-              {/* Buscador */}
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar colegio por nombre o destino..."
-                  className="w-full pl-11 pr-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs font-semibold focus:outline-none focus:border-primary/50 transition-all"
-                />
-              </div>
+            {/* TAB SELECTION CARDS - CUADRADOS AMARILLOS CON LETRAS NEGRAS AL ESTAR ACTIVOS */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+              <button
+                type="button"
+                onClick={() => setActiveTab('colegios')}
+                className={`p-4.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2.5 border ${
+                  activeTab === 'colegios'
+                    ? 'bg-primary text-black border-primary shadow-[0_0_20px_rgba(250,204,21,0.2)]'
+                    : 'bg-zinc-900/60 border-zinc-850 text-zinc-400 hover:text-white hover:bg-zinc-900 hover:border-zinc-700'
+                }`}
+              >
+                <Database size={15} />
+                Gestión de Colegios
+              </button>
 
-              {/* Filtros */}
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2 bg-zinc-900/40 border border-zinc-800/80 px-3.5 py-1.5 rounded-xl">
-                  <SlidersHorizontal size={12} className="text-zinc-500" />
-                  <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider pl-0.5">Filtros</span>
-                </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('encuestas')}
+                className={`p-4.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2.5 border ${
+                  activeTab === 'encuestas'
+                    ? 'bg-primary text-black border-primary shadow-[0_0_20px_rgba(250,204,21,0.2)]'
+                    : 'bg-zinc-900/60 border-zinc-850 text-zinc-400 hover:text-white hover:bg-zinc-900 hover:border-zinc-700'
+                }`}
+              >
+                <Sparkles size={15} />
+                Sistema de Encuestas
+              </button>
 
-                {/* Destino Filter */}
-                <select
-                  value={destFilter}
-                  onChange={(e) => setDestFilter(e.target.value as any)}
-                  className="bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-bold text-white px-3.5 py-2 focus:outline-none focus:border-primary"
-                >
-                  <option value="Todos">Todos los Destinos</option>
-                  <option value="Mar del Plata">Mar del Plata</option>
-                  <option value="Villa Carlos Paz">Villa Carlos Paz</option>
-                </select>
-
-                {/* Items por Página */}
-                <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-3.5 py-1.5 rounded-xl">
-                  <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Ver</span>
-                  <select
-                    value={itemsPerPage}
-                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                    className="bg-transparent border-none text-xs font-black text-white focus:outline-none p-0 cursor-pointer"
-                  >
-                    <option value={10}>10</option>
-                    <option value={15}>15</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('metricas')}
+                className={`p-4.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2.5 border ${
+                  activeTab === 'metricas'
+                    ? 'bg-primary text-black border-primary shadow-[0_0_20px_rgba(250,204,21,0.2)]'
+                    : 'bg-zinc-900/60 border-zinc-850 text-zinc-400 hover:text-white hover:bg-zinc-900 hover:border-zinc-700'
+                }`}
+              >
+                <SlidersHorizontal size={15} />
+                Métricas y Estadísticas
+              </button>
             </div>
 
-            {/* Tabla de Colegios */}
-            <div className="bg-zinc-950/80 border border-zinc-850 rounded-2xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse select-none">
-                  <thead>
-                    <tr className="bg-zinc-900/40 border-b border-zinc-850">
-                      <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Colegio</th>
-                      <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Destino</th>
-                      <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Fecha de Viaje</th>
-                      <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-right">Acciones Administrativas</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-900">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={4} className="text-center py-20 text-xs text-zinc-500 font-bold uppercase tracking-wider animate-pulse">
-                          Cargando la base de datos de colegios...
-                        </td>
-                      </tr>
-                    ) : currentSchools.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="text-center py-20 text-zinc-600 text-xs font-bold uppercase tracking-wider">
-                          No se encontraron colegios con los filtros seleccionados
-                        </td>
-                      </tr>
-                    ) : (
-                      currentSchools.map((school) => (
-                        <tr 
-                          key={school.id} 
-                          onClick={() => setViewingGallerySchool(school)}
-                          className="hover:bg-zinc-900/30 cursor-pointer transition-colors group"
+            {/* TAB CONTENT A: GESTIÓN DE COLEGIOS */}
+            {activeTab === 'colegios' && (
+              <div className="space-y-6">
+                {/* Panel de Filtros y Buscador */}
+                <div className="bg-zinc-950/80 border border-zinc-850 p-4 sm:p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  
+                  {/* Buscador */}
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Buscar colegio por nombre o destino..."
+                      className="w-full pl-11 pr-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs font-semibold focus:outline-none focus:border-primary/50 transition-all"
+                    />
+                  </div>
+
+                  {/* Filtros */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2 bg-zinc-900/40 border border-zinc-800/80 px-3.5 py-1.5 rounded-xl">
+                      <SlidersHorizontal size={12} className="text-zinc-500" />
+                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider pl-0.5">Filtros</span>
+                    </div>
+
+                    {/* Destino Filter */}
+                    <select
+                      value={destFilter}
+                      onChange={(e) => setDestFilter(e.target.value as any)}
+                      className="bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-bold text-white px-3.5 py-2 focus:outline-none focus:border-primary"
+                    >
+                      <option value="Todos">Todos los Destinos</option>
+                      <option value="Mar del Plata">Mar del Plata</option>
+                      <option value="Villa Carlos Paz">Villa Carlos Paz</option>
+                    </select>
+
+                    {/* Items por Página */}
+                    <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-3.5 py-1.5 rounded-xl">
+                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider">Ver</span>
+                      <select
+                        value={itemsPerPage}
+                        onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                        className="bg-transparent border-none text-xs font-black text-white focus:outline-none p-0 cursor-pointer"
+                      >
+                        <option value={10}>10</option>
+                        <option value={15}>15</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tabla de Colegios */}
+                <div className="bg-zinc-950/80 border border-zinc-850 rounded-2xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse select-none">
+                      <thead>
+                        <tr className="bg-zinc-900/40 border-b border-zinc-850">
+                          <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Colegio</th>
+                          <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Destino</th>
+                          <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Fecha de Viaje</th>
+                          <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-right">Acciones Administrativas</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-900">
+                        {loading ? (
+                          <tr>
+                            <td colSpan={4} className="text-center py-20 text-xs text-zinc-500 font-bold uppercase tracking-wider animate-pulse">
+                              Cargando la base de datos de colegios...
+                            </td>
+                          </tr>
+                        ) : currentSchools.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="text-center py-20 text-zinc-600 text-xs font-bold uppercase tracking-wider">
+                              No se encontraron colegios con los filtros seleccionados
+                            </td>
+                          </tr>
+                        ) : (
+                          currentSchools.map((school) => (
+                            <tr 
+                              key={school.id} 
+                              onClick={() => setViewingGallerySchool(school)}
+                              className="hover:bg-zinc-900/30 cursor-pointer transition-colors group"
+                            >
+                              {/* Info Colegio */}
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-11 h-11 rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 flex-shrink-0 relative">
+                                    <img src={school.group_photo_web} alt={school.name} className="w-full h-full object-cover" />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-xs sm:text-sm font-black text-white group-hover:text-primary transition-colors uppercase leading-none">
+                                      {school.name}
+                                    </h4>
+                                    <span className="text-[9px] text-zinc-500 uppercase tracking-wider block mt-1 font-semibold">ID: {school.id.slice(0,8)}...</span>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Destino */}
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="inline-flex items-center gap-1 text-[10px] text-zinc-300 font-bold uppercase tracking-wider">
+                                  <MapPin size={10} className="text-primary" />
+                                  {school.destination}
+                                </span>
+                              </td>
+
+                              {/* Fecha */}
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="inline-flex items-center gap-1 text-[10px] text-zinc-300 font-bold uppercase tracking-wider">
+                                  <CalendarIcon size={10} className="text-primary" />
+                                  {school.travel_date}
+                                </span>
+                              </td>
+
+                              {/* Acciones */}
+                              <td className="px-6 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => setViewingGallerySchool(school)}
+                                    className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-[10px] font-black uppercase tracking-wider text-white transition-colors"
+                                  >
+                                    <ImageIcon size={11} className="text-primary" />
+                                    Galería
+                                  </button>
+                                  
+                                  <button
+                                    onClick={(e) => openEditModal(school, e)}
+                                    className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                                    title="Editar Datos"
+                                  >
+                                    <Edit size={12} />
+                                  </button>
+
+                                  <button
+                                    onClick={(e) => handleDeleteSchool(school.id, school.name, e)}
+                                    className="p-2 rounded-xl bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-900/60 text-zinc-500 hover:text-red-400 transition-colors"
+                                    title="Eliminar Colegio"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Paginador */}
+                  {totalPages > 1 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4.5 border-t border-zinc-900 bg-zinc-900/10">
+                      <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                        Mostrando del {indexOfFirstItem + 1} al {Math.min(indexOfLastItem, totalItems)} de {totalItems} colegios
+                      </span>
+                      
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handlePageChange(currentPage - 1)}
+                          disabled={currentPage === 1}
+                          className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-zinc-900 text-white transition-colors border border-zinc-800/80"
                         >
-                          {/* Info Colegio */}
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-4">
-                              <div className="w-11 h-11 rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 flex-shrink-0 relative">
-                                <img src={school.group_photo_web} alt={school.name} className="w-full h-full object-cover" />
-                              </div>
-                              <div>
-                                <h4 className="text-xs sm:text-sm font-black text-white group-hover:text-primary transition-colors uppercase leading-none">
-                                  {school.name}
-                                </h4>
-                                <span className="text-[9px] text-zinc-500 uppercase tracking-wider block mt-1 font-semibold">ID: {school.id.slice(0,8)}...</span>
-                              </div>
-                            </div>
-                          </td>
+                          <ChevronLeft size={14} />
+                        </button>
 
-                          {/* Destino */}
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-300 font-bold uppercase tracking-wider">
-                              <MapPin size={10} className="text-primary" />
-                              {school.destination}
+                        {Array.from({ length: totalPages }).map((_, i) => {
+                          const pageNum = i + 1;
+                          const isActive = currentPage === pageNum;
+                          return (
+                            <button
+                              key={`page-${pageNum}`}
+                              onClick={() => handlePageChange(pageNum)}
+                              className={`w-8.5 h-8.5 rounded-lg text-xs font-black transition-all ${
+                                isActive
+                                  ? 'bg-primary text-black glow-yellow'
+                                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800/80'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+
+                        <button
+                          onClick={() => handlePageChange(currentPage + 1)}
+                          disabled={currentPage === totalPages}
+                          className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-zinc-900 text-white transition-colors border border-zinc-800/80"
+                        >
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT B: SISTEMA DE ENCUESTAS */}
+            {activeTab === 'encuestas' && (
+              <div className="space-y-6">
+                
+                {/* Cabecera Sección Encuestas */}
+                <div className="bg-zinc-950 border border-zinc-850 p-6 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent pointer-events-none" />
+                  
+                  <div className="z-10">
+                    <span className="text-[9px] font-black text-primary uppercase tracking-widest block mb-1">Módulo de Participación</span>
+                    <h2 className="text-xl sm:text-2xl font-black uppercase text-white tracking-tight leading-none">Creador y Gestor de Encuestas</h2>
+                    <p className="text-[10px] text-zinc-500 uppercase mt-2 font-bold tracking-wider">Armá encuestas dinámicas en tiempo real para que los egresados voten desde la app.</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSurveyQuestion('');
+                      setSurveyOptions(['', '', '', '']);
+                      setShowSurveyModal(true);
+                    }}
+                    className="flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-colors glow-yellow self-start sm:self-center z-10"
+                  >
+                    <Plus size={16} />
+                    Crear Encuesta
+                  </button>
+                </div>
+
+                {/* Listado de Encuestas */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  {surveys.length === 0 ? (
+                    <div className="col-span-2 text-center py-20 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-600">
+                      <Sparkles size={28} className="mx-auto text-zinc-800 mb-2 animate-bounce" />
+                      <p className="text-xs font-bold uppercase tracking-wider">No hay encuestas creadas en este momento</p>
+                      <p className="text-[10px] uppercase mt-1">Hacé clic en "Crear Encuesta" en el panel de arriba para iniciar.</p>
+                    </div>
+                  ) : (
+                    surveys.map((survey) => {
+                      const totalVotes = survey.options.reduce((sum: number, o: any) => sum + o.votes, 0);
+                      
+                      return (
+                        <div key={survey.id} className={`p-5 rounded-2xl border bg-zinc-950 flex flex-col justify-between transition-all duration-300 relative overflow-hidden group ${
+                          survey.active 
+                            ? 'border-primary shadow-[0_0_20px_rgba(250,204,21,0.06)]' 
+                            : 'border-zinc-850 hover:border-zinc-700'
+                        }`}>
+                          {/* Active state indicator badge */}
+                          <div className="flex justify-between items-start mb-4 z-10">
+                            <span className={`text-[8px] font-black uppercase px-2.5 py-1 rounded-full border ${
+                              survey.active 
+                                ? 'bg-primary/20 border-primary/40 text-primary glow-yellow'
+                                : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                            }`}>
+                              {survey.active ? 'Encuesta Activa' : 'Borrador / Inactiva'}
                             </span>
-                          </td>
 
-                          {/* Fecha */}
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-300 font-bold uppercase tracking-wider">
-                              <CalendarIcon size={10} className="text-primary" />
-                              {school.travel_date}
-                            </span>
-                          </td>
-
-                          {/* Acciones */}
-                          <td className="px-6 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center gap-1.5">
                               <button
-                                onClick={() => setViewingGallerySchool(school)}
-                                className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-[10px] font-black uppercase tracking-wider text-white transition-colors"
+                                type="button"
+                                onClick={() => handleToggleSurveyActive(survey.id)}
+                                className={`px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all ${
+                                  survey.active 
+                                    ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-red-400' 
+                                    : 'bg-primary text-black border-primary font-black hover:bg-primary/90 glow-yellow'
+                                }`}
                               >
-                                <ImageIcon size={11} className="text-primary" />
-                                Galería
+                                {survey.active ? 'Desactivar' : 'Activar en Sitio'}
                               </button>
-                              
                               <button
-                                onClick={(e) => openEditModal(school, e)}
-                                className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white transition-colors"
-                                title="Editar Datos"
-                              >
-                                <Edit size={12} />
-                              </button>
-
-                              <button
-                                onClick={(e) => handleDeleteSchool(school.id, school.name, e)}
-                                className="p-2 rounded-xl bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-900/60 text-zinc-500 hover:text-red-400 transition-colors"
-                                title="Eliminar Colegio"
+                                type="button"
+                                onClick={() => handleDeleteSurvey(survey.id, survey.question)}
+                                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-900/60 text-zinc-500 hover:text-red-400 transition-colors"
                               >
                                 <Trash2 size={12} />
                               </button>
                             </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                          </div>
 
-              {/* Paginador */}
-              {totalPages > 1 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4.5 border-t border-zinc-900 bg-zinc-900/10">
-                  <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-                    Mostrando del {indexOfFirstItem + 1} al {Math.min(indexOfLastItem, totalItems)} de {totalItems} colegios
-                  </span>
-                  
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-zinc-900 text-white transition-colors border border-zinc-800/80"
-                    >
-                      <ChevronLeft size={14} />
-                    </button>
+                          {/* Question */}
+                          <h3 className="text-sm font-black uppercase tracking-tight text-white mb-5 z-10 leading-snug">
+                            {survey.question}
+                          </h3>
 
-                    {Array.from({ length: totalPages }).map((_, i) => {
-                      const pageNum = i + 1;
-                      const isActive = currentPage === pageNum;
-                      return (
-                        <button
-                          key={`page-${pageNum}`}
-                          onClick={() => handlePageChange(pageNum)}
-                          className={`w-8.5 h-8.5 rounded-lg text-xs font-black transition-all ${
-                            isActive
-                              ? 'bg-primary text-black glow-yellow'
-                              : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800/80'
-                          }`}
-                        >
-                          {pageNum}
-                        </button>
+                          {/* Options / Progress bars */}
+                          <div className="space-y-3 z-10">
+                            {survey.options.map((option: any, optIdx: number) => {
+                              const percentage = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
+                              return (
+                                <div key={optIdx} className="space-y-1 group/opt cursor-pointer" onClick={() => handleSimulateVote(survey.id, optIdx)} title="Hacé clic para simular un voto">
+                                  <div className="flex justify-between items-center text-[10px] font-semibold text-zinc-400 group-hover/opt:text-white transition-colors">
+                                    <span className="truncate max-w-[80%] font-bold">{option.text}</span>
+                                    <span className="font-mono text-zinc-300 font-bold">{option.votes} votos ({percentage}%)</span>
+                                  </div>
+                                  <div className="w-full h-2.5 bg-zinc-900 rounded-full overflow-hidden border border-zinc-850 relative">
+                                    <div 
+                                      className={`h-full rounded-full transition-all duration-700 ${
+                                        survey.active ? 'bg-gradient-to-r from-yellow-500 to-primary glow-yellow' : 'bg-zinc-750'
+                                      }`}
+                                      style={{ width: `${percentage}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Footer Info */}
+                          <div className="mt-6 pt-4 border-t border-zinc-900 flex justify-between items-center text-[8px] text-zinc-500 font-bold uppercase tracking-wider">
+                            <span>Votos Totales: {totalVotes}</span>
+                            <span>Creado el {survey.created_at}</span>
+                          </div>
+                        </div>
                       );
-                    })}
+                    })
+                  )}
+                </div>
 
-                    <button
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                      className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-zinc-900 text-white transition-colors border border-zinc-800/80"
-                    >
-                      <ChevronRight size={14} />
-                    </button>
+              </div>
+            )}
+
+            {/* TAB CONTENT C: METRICAS Y ESTADISTICAS */}
+            {activeTab === 'metricas' && (
+              <div className="space-y-6">
+                
+                {/* Cabecera Sección Métricas */}
+                <div className="bg-zinc-950 border border-zinc-850 p-6 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent pointer-events-none" />
+                  
+                  <div className="z-10">
+                    <span className="text-[9px] font-black text-primary uppercase tracking-widest block mb-1">Centro de Operaciones</span>
+                    <h2 className="text-xl sm:text-2xl font-black uppercase text-white tracking-tight leading-none">Métricas y Estadísticas en Vivo</h2>
+                    <p className="text-[10px] text-zinc-500 uppercase mt-2 font-bold tracking-wider">Monitoreá la actividad de descargas, subidas y visitas del portal.</p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-[10px] font-bold text-zinc-400 z-10 self-start sm:self-center">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse block"></span>
+                    <span>Actualizado hace unos segundos</span>
                   </div>
                 </div>
-              )}
-            </div>
+
+                {/* Grid de 4 KPIs */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-zinc-950 border border-zinc-850 p-4.5 rounded-2xl shadow-lg relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 h-16 w-16 bg-primary/5 blur-xl pointer-events-none" />
+                    <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block">Visitas Totales (Portal)</span>
+                    <span className="text-2xl font-black text-primary block mt-2.5 leading-none font-outfit glow-text-yellow">12,854</span>
+                    <span className="text-[9px] text-emerald-400 font-bold block mt-3 uppercase tracking-wider">+18.4% este mes</span>
+                  </div>
+
+                  <div className="bg-zinc-950 border border-zinc-850 p-4.5 rounded-2xl shadow-lg relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 h-16 w-16 bg-primary/5 blur-xl pointer-events-none" />
+                    <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block">Descargas de Fotos HD</span>
+                    <span className="text-2xl font-black text-primary block mt-2.5 leading-none font-outfit glow-text-yellow">4,812</span>
+                    <span className="text-[9px] text-emerald-400 font-bold block mt-3 uppercase tracking-wider">+32.1% esta semana</span>
+                  </div>
+
+                  <div className="bg-zinc-950 border border-zinc-850 p-4.5 rounded-2xl shadow-lg relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 h-16 w-16 bg-primary/5 blur-xl pointer-events-none" />
+                    <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block">Fotos Almacenadas</span>
+                    <span className="text-2xl font-black text-primary block mt-2.5 leading-none font-outfit glow-text-yellow">1,942</span>
+                    <span className="text-[9px] text-zinc-500 font-bold block mt-3 uppercase tracking-wider">Optimización 75% activa</span>
+                  </div>
+
+                  <div className="bg-zinc-950 border border-zinc-850 p-4.5 rounded-2xl shadow-lg relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 h-16 w-16 bg-primary/5 blur-xl pointer-events-none" />
+                    <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block">Colegios Activos</span>
+                    <span className="text-2xl font-black text-primary block mt-2.5 leading-none font-outfit glow-text-yellow">{schools.length}</span>
+                    <span className="text-[9px] text-zinc-500 font-bold block mt-3 uppercase tracking-wider">2 Destinos principales</span>
+                  </div>
+                </div>
+
+                {/* Gráficos / Listados de métricas */}
+                <div className="grid lg:grid-cols-12 gap-6">
+                  {/* Gráfico de Barras Semanales */}
+                  <div className="lg:col-span-8 bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-6">
+                    <div className="flex items-center justify-between pb-3.5 border-b border-zinc-900">
+                      <span className="text-xs font-black uppercase tracking-widest text-zinc-400 block leading-none">Tráfico e Interacciones Semanales</span>
+                      <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Lunes a Domingo</span>
+                    </div>
+
+                    <div className="flex items-end justify-between h-48 pt-6 px-4">
+                      {[
+                        { day: 'Lun', val: 40, label: '920' },
+                        { day: 'Mar', val: 55, label: '1,240' },
+                        { day: 'Mie', val: 75, label: '1,890' },
+                        { day: 'Jue', val: 65, label: '1,420' },
+                        { day: 'Vie', val: 95, label: '2,420' },
+                        { day: 'Sab', val: 100, label: '2,890' },
+                        { day: 'Dom', val: 85, label: '2,100' }
+                      ].map((item, idx) => (
+                        <div key={idx} className="flex flex-col items-center gap-2.5 flex-1 group/bar cursor-pointer">
+                          <span className="text-[8px] font-mono font-bold text-zinc-500 group-hover/bar:text-primary transition-colors opacity-0 group-hover/bar:opacity-100 transform translate-y-1 group-hover/bar:-translate-y-0.5 duration-300">{item.label}</span>
+                          <div className="w-6 sm:w-8 bg-zinc-900 rounded-lg overflow-hidden h-32 border border-zinc-850/80 relative flex items-end">
+                            <div 
+                              className="w-full bg-gradient-to-t from-yellow-500 to-primary transition-all duration-1000 ease-out glow-yellow" 
+                              style={{ height: `${item.val}%` }}
+                            />
+                          </div>
+                          <span className="text-[9px] font-bold text-zinc-500 group-hover/bar:text-white transition-colors uppercase tracking-wider">{item.day}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Distribución por Destino y Dispositivo */}
+                  <div className="lg:col-span-4 bg-zinc-950 border border-zinc-850 p-5 rounded-2xl flex flex-col justify-between gap-5">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between pb-3.5 border-b border-zinc-900">
+                        <span className="text-xs font-black uppercase tracking-widest text-zinc-400 block leading-none">Distribución de Tráfico distribution</span>
+                      </div>
+
+                      {/* Destinos Bar */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                          <span>Destino</span>
+                          <span className="text-primary font-black">VCP (68%) vs MDP (32%)</span>
+                        </div>
+                        <div className="w-full h-3.5 bg-zinc-900 border border-zinc-850 rounded-full overflow-hidden flex">
+                          <div className="h-full bg-primary glow-yellow" style={{ width: '68%' }} title="Villa Carlos Paz 68%" />
+                          <div className="h-full bg-zinc-700" style={{ width: '32%' }} title="Mar del Plata 32%" />
+                        </div>
+                      </div>
+
+                      {/* Dispositivos Bar */}
+                      <div className="space-y-2 pt-2">
+                        <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                          <span>Dispositivo</span>
+                          <span className="text-primary font-black">Mobile (82%) vs PC (18%)</span>
+                        </div>
+                        <div className="w-full h-3.5 bg-zinc-900 border border-zinc-850 rounded-full overflow-hidden flex">
+                          <div className="h-full bg-primary glow-yellow" style={{ width: '82%' }} title="Móvil 82%" />
+                          <div className="h-full bg-zinc-700" style={{ width: '18%' }} title="PC / Desktop 18%" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-zinc-900/30 border border-zinc-850 rounded-xl space-y-1.5">
+                      <span className="text-[9px] font-black text-primary uppercase tracking-widest block leading-none">Dato Destacado</span>
+                      <p className="text-[9px] text-zinc-400 font-semibold uppercase leading-normal tracking-wide">
+                        El 82% de las descargas e interacciones se realizan desde teléfonos móviles el sábado a la noche después de los boliches.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Top Colegios Table */}
+                <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden p-5 space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-900">
+                    <span className="text-xs font-black uppercase tracking-widest text-zinc-400 block leading-none">Colegios con Mayor Tráfico de Descargas</span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse select-none">
+                      <thead>
+                        <tr className="border-b border-zinc-900">
+                          <th className="py-2.5 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Colegio</th>
+                          <th className="py-2.5 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Destino</th>
+                          <th className="py-2.5 text-[9px] font-black text-zinc-500 uppercase tracking-widest text-right">Visitas</th>
+                          <th className="py-2.5 text-[9px] font-black text-zinc-500 uppercase tracking-widest text-right">Descargas HD</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-900/60">
+                        {[
+                          { name: 'Juan 23 Ramos Mejia', dest: 'Villa Carlos Paz', views: '4,850', dls: '1,420' },
+                          { name: 'EGB Colegio San Martín', dest: 'Villa Carlos Paz', views: '3,120', dls: '984' },
+                          { name: 'Primaria Instituto Don Bosco', dest: 'Villa Carlos Paz', views: '2,540', dls: '812' },
+                          { name: 'Colegio Stella Maris', dest: 'Mar del Plata', views: '1,920', dls: '640' }
+                        ].map((school, i) => (
+                          <tr key={i} className="hover:bg-zinc-900/10">
+                            <td className="py-3 text-[11px] font-black text-white uppercase">{school.name}</td>
+                            <td className="py-3 text-[10px] font-bold text-zinc-400 uppercase">{school.dest}</td>
+                            <td className="py-3 text-[10px] font-mono text-zinc-300 text-right font-bold">{school.views}</td>
+                            <td className="py-3 text-[10px] font-mono text-primary text-right font-black">{school.dls}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            )}
 
           </div>
         )}
@@ -1076,6 +1495,94 @@ export const AdminDashboard: React.FC = () => {
                   className="px-6 py-3 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-colors glow-yellow"
                 >
                   {editingSchool ? 'Guardar Cambios' : 'Registrar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CREACIÓN DE ENCUESTA */}
+      {showSurveyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity">
+          <div 
+            className="relative w-full max-w-lg border border-zinc-800 rounded-2xl bg-zinc-950 shadow-premium overflow-hidden transform transition-all flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header Modal */}
+            <div className="px-6 pt-5 pb-4 flex items-center justify-between border-b border-zinc-900 flex-shrink-0">
+              <div>
+                <h3 className="text-sm font-black uppercase text-white tracking-widest flex items-center gap-1.5 leading-none">
+                  <Sparkles size={14} className="text-primary" />
+                  Nueva Encuesta Estudiantil
+                </h3>
+                <p className="text-[10px] text-zinc-500 uppercase mt-1 leading-none">
+                  Definí una pregunta y múltiples opciones para tus pasajeros
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowSurveyModal(false)}
+                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Formulario */}
+            <form onSubmit={handleCreateSurvey} className="p-6 space-y-4 overflow-y-auto flex-1 scrollbar-thin">
+              
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
+                  Pregunta de la Encuesta
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={surveyQuestion}
+                  onChange={(e) => setSurveyQuestion(e.target.value)}
+                  placeholder="¿Cuál fue el mejor boliche de tu viaje?"
+                  className="w-full px-3.5 py-3 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <span className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest leading-none">Opciones de Respuesta</span>
+                
+                {surveyOptions.map((option, idx) => (
+                  <div key={idx}>
+                    <label className="block text-[8px] font-bold text-zinc-500 uppercase tracking-wider mb-1">
+                      Opción #{idx + 1} {idx < 2 && '(Obligatoria)'}
+                    </label>
+                    <input
+                      type="text"
+                      required={idx < 2}
+                      value={option}
+                      onChange={(e) => {
+                        const copy = [...surveyOptions];
+                        copy[idx] = e.target.value;
+                        setSurveyOptions(copy);
+                      }}
+                      placeholder={`Ej. Opción de respuesta ${idx + 1}`}
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-[11px] font-semibold focus:outline-none"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Botones de acción modal */}
+              <div className="flex justify-end gap-3 pt-3 border-t border-zinc-900 select-none flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowSurveyModal(false)}
+                  className="px-5 py-3 rounded-xl border border-zinc-800 bg-zinc-950 hover:bg-zinc-900 text-xs font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-3 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-colors glow-yellow"
+                >
+                  Crear Encuesta
                 </button>
               </div>
             </form>
