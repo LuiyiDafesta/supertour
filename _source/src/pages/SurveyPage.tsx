@@ -38,6 +38,12 @@ export const SurveyPage: React.FC = () => {
     const loadSurveyData = async () => {
       setLoading(true);
       try {
+        // Validate if surveyId is a valid UUID before querying Supabase to avoid 400 error in console
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(surveyId || '');
+        if (!isUUID) {
+          throw new Error('surveyId is not a valid UUID, skipping Supabase and using fallback');
+        }
+
         // 1. Fetch survey by ID
         const { data: surveyData, error: surveyError } = await supabase
           .from('surveys')

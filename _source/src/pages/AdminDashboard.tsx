@@ -97,8 +97,6 @@ export const AdminDashboard: React.FC = () => {
       answer_type: 'number',
       active: false,
       created_at: '2026-05-22'
-    },
-    {
     }
   ]);
   const [showSurveyModal, setShowSurveyModal] = useState(false);
