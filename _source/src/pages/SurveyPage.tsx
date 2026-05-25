@@ -235,18 +235,20 @@ export const SurveyPage: React.FC = () => {
     if (targetWebhookUrl && targetWebhookUrl.trim() !== '') {
       console.log('[SuperTour CRM] Disparando webhook de CRM:', targetWebhookUrl);
       
-      // Enviar POST con JSON. Usamos 'cors' para asegurar el header application/json.
-      // Si el servidor de n8n no tiene cabeceras CORS, el navegador reportará un error CORS en la consola
-      // pero la petición POST de todas formas llega al servidor de n8n y se ejecuta con éxito.
-      fetch(targetWebhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      }).catch(webhookErr => {
+      try {
+        // IMPORTANTE: Await el fetch para asegurar que el navegador envíe la petición completa
+        // antes de actualizar el estado de React y re-renderizar la UI (evitando cancelaciones del navegador).
+        await fetch(targetWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        console.log('[SuperTour CRM] Webhook despachado con éxito.');
+      } catch (webhookErr) {
         console.warn('Error en la llamada del webhook de n8n:', webhookErr);
-      });
+      }
     }
 
     // 3. Registrar en local storage del pasajero para evitar re-voto
