@@ -858,21 +858,6 @@ export const AdminDashboard: React.FC = () => {
       .sort((a, b) => (b.downloads + b.clicks) - (a.downloads + a.clicks))
       .slice(0, 5);
 
-    // Si está vacío, rellenamos con fallbacks elegantes pero reales de schools
-    if (topSchoolsSorted.length === 0 && schools.length > 0) {
-      schools.slice(0, 4).forEach((s, idx) => {
-        topSchoolsSorted.push({
-          id: s.id,
-          name: s.name,
-          destination: s.destination,
-          views: 120 - idx * 20,
-          clicks: 80 - idx * 15,
-          downloads: 40 - idx * 8,
-          calSearches: 15 - idx * 3
-        });
-      });
-    }
-
     // Colegio TOP almanaque
     let topSearchedSchool = 'Ninguno';
     let topSearchedCount = 0;
@@ -883,10 +868,6 @@ export const AdminDashboard: React.FC = () => {
         if (matchingSchool) topSearchedSchool = matchingSchool.name;
       }
     });
-    if (topSearchedCount === 0 && schools.length > 0) {
-      topSearchedSchool = schools[0].name;
-      topSearchedCount = 28;
-    }
 
     // Colegio TOP click fotos
     let topPhotoClickSchool = 'Ninguno';
@@ -898,17 +879,13 @@ export const AdminDashboard: React.FC = () => {
         if (matchingSchool) topPhotoClickSchool = matchingSchool.name;
       }
     });
-    if (topPhotoClickCount === 0 && schools.length > 0) {
-      topPhotoClickSchool = schools[schools.length - 1].name;
-      topPhotoClickCount = 142;
-    }
 
     // Respuestas de encuesta
     const surveyVotesCount = analyticsEvents.filter(e => e.event_type === 'survey_vote').length;
 
     return {
-      totalViews: totalViews || 485,
-      totalDownloads: totalDownloads || 92,
+      totalViews,
+      totalDownloads,
       photosCount: exactPhotosCount,
       videosCount,
       formattedSpace,
