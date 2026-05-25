@@ -17,7 +17,7 @@ export const SurveyPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   // Form states
-  const [userAnswer, setUserAnswer] = useState<string>('');
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [passengerName, setPassengerName] = useState<string>('');
   const [passengerEmail, setPassengerEmail] = useState<string>('');
   const [passengerPhone, setPassengerPhone] = useState<string>('');
@@ -46,7 +46,21 @@ export const SurveyPage: React.FC = () => {
           .single();
 
         if (surveyError) throw surveyError;
-        setSurvey(surveyData);
+
+        let surveyDataFromDb = surveyData;
+        if (surveyDataFromDb) {
+          // If database doesn't have the questions array or it's empty, build dynamic fallback array for backward compatibility
+          if (!surveyDataFromDb.questions || !Array.isArray(surveyDataFromDb.questions) || surveyDataFromDb.questions.length === 0) {
+            surveyDataFromDb.questions = [
+              {
+                id: 'q-legacy',
+                question: surveyDataFromDb.question || 'Dejanos tus comentarios sobre el viaje:',
+                answer_type: surveyDataFromDb.answer_type || 'text'
+              }
+            ];
+          }
+          setSurvey(surveyDataFromDb);
+        }
 
         // Check if passenger already voted on this specific survey
         const alreadyVoted = localStorage.getItem(`supertour_voted_survey_${surveyId}`);
@@ -67,30 +81,26 @@ export const SurveyPage: React.FC = () => {
         }
       } catch (err) {
         console.warn('Error loading survey from DB, fallback to local/mock database:', err);
-        // Fallback robust offline
+        // Fallback robust offline with multiple questions
         const mockSurveys = [
           {
             id: 'survey-1',
-            title: 'Tu Opinión sobre el Viaje',
-            description: 'Queremos saber qué tal te pareció la excursión premium a Pekos y qué podemos mejorar.',
-            question: 'Dejanos tus comentarios sobre lo que más te gustó y qué mejorarías para los próximos grupos:',
-            answer_type: 'text',
+            title: 'Encuesta Final de Viaje',
+            description: 'Queremos saber tu opinión detallada sobre los distintos aspectos de tu viaje de egresados.',
+            questions: [
+              { id: 'q-1', question: '¿Cómo calificarías el desempeño general de tu coordinador?', answer_type: 'number' },
+              { id: 'q-2', question: 'Dejanos tus comentarios sobre lo que más te gustó y qué mejorarías:', answer_type: 'text' },
+              { id: 'q-3', question: '¿SuperTourChannel cumplió tus expectativas de viaje?', answer_type: 'boolean' }
+            ],
             active: true
           },
           {
             id: 'survey-2',
-            title: 'Puntuación del Coordinador',
+            title: 'Calificación de Coordinadores',
             description: 'Calificá el desempeño general de tu coordinador asignado durante toda la estadía.',
-            question: '¿Qué nota le ponés al servicio y acompañamiento del coordinador?',
-            answer_type: 'number',
-            active: false
-          },
-          {
-            id: 'survey-3',
-            title: '¿Volverías a viajar con nosotros?',
-            description: 'Queremos saber si cumplimos tus expectativas en este viaje de egresados.',
-            question: '¿SuperTourChannel cumplió tus expectativas?',
-            answer_type: 'boolean',
+            questions: [
+              { id: 'q-1', question: '¿Qué nota le ponés al servicio y acompañamiento del coordinador?', answer_type: 'number' }
+            ],
             active: false
           }
         ];
@@ -126,14 +136,16 @@ export const SurveyPage: React.FC = () => {
     e.preventDefault();
     if (!survey || isSubmitting) return;
 
-    // Validar requeridos
+    // Validar requeridos personales
     if (!passengerName.trim() || !passengerEmail.trim()) {
       alert('Nombre y Email son obligatorios para enviar tu respuesta.');
       return;
     }
 
-    if (!userAnswer) {
-      alert('Por favor responde la pregunta de la encuesta antes de enviar.');
+    // Validar que se hayan respondido todas las preguntas
+    const unanswered = survey.questions.filter((q: any) => !answers[q.id]);
+    if (unanswered.length > 0) {
+      alert('Por favor responde a todas las preguntas de la encuesta antes de enviar.');
       return;
     }
 
@@ -143,18 +155,23 @@ export const SurveyPage: React.FC = () => {
     const activeSchoolName = school ? school.name : 'Individual / Sin Colegio';
     const activeDestination = school ? school.destination : 'Villa Carlos Paz';
 
+    const answersList = survey.questions.map((q: any) => ({
+      question_id: q.id,
+      question: q.question,
+      answer_type: q.answer_type,
+      answer: answers[q.id]
+    }));
+
     const payload = {
       survey_id: survey.id,
       survey_title: survey.title,
-      question: survey.question,
-      answer_type: survey.answer_type,
-      answer: userAnswer,
       school_id: activeSchoolId,
       school_name: activeSchoolName,
       destination: activeDestination,
       passenger_name: passengerName,
       passenger_email: passengerEmail,
       passenger_phone: passengerPhone || 'No provisto',
+      answers: answersList,
       submitted_at: new Date().toISOString()
     };
 
@@ -165,38 +182,19 @@ export const SurveyPage: React.FC = () => {
       destination: activeDestination as any,
       metadata: {
         survey_id: survey.id,
-        question: survey.question,
-        answer: userAnswer,
-        answer_type: survey.answer_type,
+        survey_title: survey.title,
         name: passengerName,
         email: passengerEmail,
-        phone: passengerPhone || 'No provisto'
+        phone: passengerPhone || 'No provisto',
+        answers: answersList,
+        // Backward compatibility con visor legacy de analíticas: usar primera pregunta del listado
+        question: survey.questions[0]?.question || 'Pregunta general',
+        answer: answers[survey.questions[0]?.id] || 'No provisto',
+        answer_type: survey.questions[0]?.answer_type || 'text'
       }
     });
 
-    // 2. Incrementar la cuenta del voto en la tabla surveys
-    try {
-      // Incrementar localmente en caliente si existen opciones mapeadas, sino continuar
-      const { data: currentSurvey } = await supabase
-        .from('surveys')
-        .select('*')
-        .eq('id', survey.id)
-        .single();
-      
-      if (currentSurvey && currentSurvey.options) {
-        const updatedOptions = currentSurvey.options.map((opt: any) => 
-          opt.text === userAnswer ? { ...opt, votes: opt.votes + 1 } : opt
-        );
-        await supabase
-          .from('surveys')
-          .update({ options: updatedOptions })
-          .eq('id', survey.id);
-      }
-    } catch (err) {
-      console.warn('Error al actualizar contador en Supabase, omitiendo para continuar:', err);
-    }
-
-    // 3. Consultar y disparar webhook a n8n si está configurado en supertour_settings
+    // 2. Intentar disparar webhook a n8n si está configurado en supertour_settings
     try {
       const { data: webhookSetting } = await supabase
         .from('supertour_settings')
@@ -223,8 +221,8 @@ export const SurveyPage: React.FC = () => {
       console.warn('No se pudo leer la configuración de webhook de Supabase:', webhookSettingErr);
     }
 
-    // 4. Registrar en local storage del pasajero para evitar re-voto
-    localStorage.setItem(`supertour_voted_survey_${survey.id}`, userAnswer);
+    // 3. Registrar en local storage del pasajero para evitar re-voto
+    localStorage.setItem(`supertour_voted_survey_${survey.id}`, 'voted_ok');
     
     // Éxito
     setIsSubmitting(false);
@@ -299,7 +297,7 @@ export const SurveyPage: React.FC = () => {
             <p className="text-xs text-zinc-400 mt-4 leading-relaxed font-semibold uppercase tracking-wide">
               {votedToken 
                 ? 'Ya registramos tu participación en esta encuesta previamente. ¡Muchas gracias por tu tiempo y opiniones!'
-                : 'Tu opinión fue registrada en vivo con éxito y despachada a nuestros coordinadores. ¡Muchas gracias por sumarte!'}
+                : 'Tus respuestas fueron registradas en vivo con éxito y despachadas a nuestros coordinadores. ¡Muchas gracias por sumarte!'}
             </p>
 
             {school && (
@@ -318,7 +316,7 @@ export const SurveyPage: React.FC = () => {
           </div>
         ) : (
           /* FORMULARIO DE ENCUESTA */
-          <form onSubmit={handleSubmit} className="glass-card rounded-3xl border border-zinc-800/40 p-6 sm:p-8 bg-zinc-950/80 shadow-premium w-full space-y-6">
+          <form onSubmit={handleSubmit} className="glass-card rounded-3xl border border-zinc-800/40 p-6 sm:p-8 bg-zinc-950/80 shadow-premium w-full space-y-7">
             
             {/* Header Encuesta */}
             <div className="text-center select-none pb-4 border-b border-zinc-900">
@@ -342,82 +340,95 @@ export const SurveyPage: React.FC = () => {
               </div>
             )}
 
-            {/* Input según tipo de encuesta */}
-            <div className="space-y-3">
-              <label className="block text-xs font-black uppercase tracking-widest text-primary glow-text-yellow select-none">
-                {survey.question}
-              </label>
-
-              {survey.answer_type === 'text' && (
-                <div className="space-y-1.5">
-                  <textarea
-                    required
-                    value={userAnswer}
-                    onChange={(e) => setUserAnswer(e.target.value)}
-                    placeholder="Escribí tus opiniones detalladas del viaje..."
-                    rows={4}
-                    maxLength={1000}
-                    className="w-full p-4 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none transition-all resize-none shadow-inner"
-                  />
-                  <div className="text-right text-[8px] font-bold text-zinc-500 uppercase tracking-wider">
-                    {userAnswer.length}/1000 caracteres
+            {/* Loop de Preguntas Dinámicas */}
+            <div className="space-y-6">
+              {survey.questions.map((q: any, qIdx: number) => (
+                <div key={q.id} className="p-5 bg-zinc-900/40 border border-zinc-850 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between border-b border-zinc-900 pb-2 select-none">
+                    <span className="text-[9px] font-black text-primary uppercase tracking-widest glow-text-yellow">
+                      Pregunta #{qIdx + 1}
+                    </span>
+                    <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-md leading-none">
+                      {q.answer_type === 'text' ? 'Texto Libre' : q.answer_type === 'number' ? 'Calificación (1-10)' : 'Conformidad'}
+                    </span>
                   </div>
-                </div>
-              )}
 
-              {survey.answer_type === 'number' && (
-                <div className="py-2 space-y-3">
-                  <div className="flex flex-wrap justify-between items-center gap-2">
-                    {Array.from({ length: 10 }).map((_, idx) => {
-                      const rating = (idx + 1).toString();
-                      const isSelected = userAnswer === rating;
-                      return (
-                        <button
-                          key={rating}
-                          type="button"
-                          onClick={() => setUserAnswer(rating)}
-                          className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl text-xs sm:text-sm font-black uppercase tracking-wider transition-all duration-200 transform hover:scale-105 active:scale-95 border ${
-                            isSelected
-                              ? 'bg-primary border-primary text-black glow-yellow shadow-lg shadow-primary/10'
-                              : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
-                          }`}
-                        >
-                          {rating}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="flex justify-between items-center text-[8px] font-black text-zinc-500 uppercase tracking-widest px-1.5 select-none">
-                    <span>Deficiente 😞</span>
-                    <span>Excelente 🤩</span>
-                  </div>
-                </div>
-              )}
+                  <label className="block text-xs font-black uppercase tracking-wide text-zinc-200 select-none">
+                    {q.question}
+                  </label>
 
-              {survey.answer_type === 'boolean' && (
-                <div className="grid grid-cols-2 gap-4 py-2">
-                  {[
-                    { text: 'Verdadero', val: 'Verdadero' },
-                    { text: 'Falso', val: 'Falso' }
-                  ].map((option) => {
-                    const isSelected = userAnswer === option.val;
-                    return (
-                      <button
-                        key={option.val}
-                        type="button"
-                        onClick={() => setUserAnswer(option.val)}
-                        className={`py-4.5 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all duration-300 transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 ${
-                          isSelected
-                            ? 'bg-primary border-primary text-black glow-yellow shadow-lg shadow-primary/10'
-                            : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
-                        }`}
-                      >
-                        {option.text}
-                      </button>
-                    );
-                  })}
+                  {q.answer_type === 'text' && (
+                    <div className="space-y-1.5">
+                      <textarea
+                        required
+                        value={answers[q.id] || ''}
+                        onChange={(e) => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                        placeholder="Escribí tu opinión o comentarios..."
+                        rows={3}
+                        maxLength={1000}
+                        className="w-full p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none resize-none shadow-inner"
+                      />
+                      <div className="text-right text-[8px] font-bold text-zinc-500 uppercase tracking-wider">
+                        {(answers[q.id] || '').length}/1000 caracteres
+                      </div>
+                    </div>
+                  )}
+
+                  {q.answer_type === 'number' && (
+                    <div className="py-1 space-y-3">
+                      <div className="flex flex-wrap justify-between items-center gap-1.5">
+                        {Array.from({ length: 10 }).map((_, idx) => {
+                          const rating = (idx + 1).toString();
+                          const isSelected = answers[q.id] === rating;
+                          return (
+                            <button
+                              key={rating}
+                              type="button"
+                              onClick={() => setAnswers(prev => ({ ...prev, [q.id]: rating }))}
+                              className={`w-9.5 h-9.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 transform hover:scale-105 active:scale-95 border ${
+                                isSelected
+                                  ? 'bg-primary border-primary text-black glow-yellow shadow-lg shadow-primary/10'
+                                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-750'
+                              }`}
+                            >
+                              {rating}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="flex justify-between items-center text-[8px] font-black text-zinc-500 uppercase tracking-widest px-1 select-none">
+                        <span>Deficiente 😞</span>
+                        <span>Excelente 🤩</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {q.answer_type === 'boolean' && (
+                    <div className="grid grid-cols-2 gap-3 py-1">
+                      {[
+                        { text: 'Verdadero', val: 'Verdadero' },
+                        { text: 'Falso', val: 'Falso' }
+                      ].map((option) => {
+                        const isSelected = answers[q.id] === option.val;
+                        return (
+                          <button
+                            key={option.val}
+                            type="button"
+                            onClick={() => setAnswers(prev => ({ ...prev, [q.id]: option.val }))}
+                            className={`py-3.5 rounded-xl text-xs font-black uppercase tracking-widest border transition-all duration-300 transform hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-2 ${
+                              isSelected
+                                ? 'bg-primary border-primary text-black glow-yellow shadow-lg shadow-primary/10'
+                                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-750'
+                            }`}
+                          >
+                            {option.text}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
+              ))}
             </div>
 
             {/* Datos Personales del Pasajero (CRM Leads) */}

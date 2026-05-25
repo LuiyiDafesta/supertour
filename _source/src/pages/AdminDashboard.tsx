@@ -108,9 +108,9 @@ export const AdminDashboard: React.FC = () => {
   const [showSurveyModal, setShowSurveyModal] = useState(false);
   const [surveyTitle, setSurveyTitle] = useState('');
   const [surveyDescription, setSurveyDescription] = useState('');
-  const [surveyQuestion, setSurveyQuestion] = useState('');
-  const [surveyAnswerType, setSurveyAnswerType] = useState<'text' | 'number' | 'boolean'>('text');
-  const [surveyOptions, setSurveyOptions] = useState<string[]>(['', '', '', '']);
+  const [surveyQuestions, setSurveyQuestions] = useState<any[]>([
+    { id: 'q-1', question: '', answer_type: 'text' }
+  ]);
 
   // Webhook states
   const [webhookUrl, setWebhookUrl] = useState('');
@@ -438,13 +438,22 @@ export const AdminDashboard: React.FC = () => {
   // Manejador para crear una nueva encuesta (Supabase con fallback local)
   const handleCreateSurvey = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!surveyQuestion.trim() || !surveyTitle.trim()) return;
+    if (!surveyTitle.trim()) return;
+
+    // Filtrar preguntas vacías
+    const validQuestions = surveyQuestions.filter(q => q.question.trim() !== '');
+    if (validQuestions.length === 0) {
+      alert('Por favor agrega al menos una pregunta antes de guardar la encuesta.');
+      return;
+    }
 
     const newSurvey = {
       title: surveyTitle,
       description: surveyDescription || 'Por favor participá de esta encuesta del viaje.',
-      question: surveyQuestion,
-      answer_type: surveyAnswerType,
+      questions: validQuestions,
+      // Backward compatibility con base de datos legacy
+      question: validQuestions[0].question,
+      answer_type: validQuestions[0].answer_type,
       options: [],
       active: false
     };
@@ -475,8 +484,7 @@ export const AdminDashboard: React.FC = () => {
     setShowSurveyModal(false);
     setSurveyTitle('');
     setSurveyDescription('');
-    setSurveyQuestion('');
-    setSurveyAnswerType('text');
+    setSurveyQuestions([{ id: 'q-1', question: '', answer_type: 'text' }]);
   };
 
   // Manejador para activar/desactivar una encuesta
@@ -1461,12 +1469,34 @@ export const AdminDashboard: React.FC = () => {
                             <h4 className="text-xs font-black uppercase text-white tracking-tight leading-snug">{survey.title}</h4>
                             <p className="text-[9px] text-zinc-500 uppercase font-semibold leading-normal tracking-wide mt-1">{survey.description}</p>
 
-                            <div className="p-2.5 rounded-lg bg-zinc-900 border border-zinc-850 mt-3.5 space-y-1">
-                              <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none">Pregunta Formulada</span>
-                              <span className="block text-[10px] font-black uppercase text-zinc-300 leading-normal">{survey.question}</span>
-                              <span className="inline-block mt-1 text-[8px] font-black text-primary uppercase tracking-widest px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
-                                Tipo: {survey.answer_type === 'text' ? 'Texto Libre' : survey.answer_type === 'number' ? 'Numérica (1-10)' : 'Verdadero / Falso'}
+                            <div className="p-2.5 rounded-lg bg-zinc-900 border border-zinc-850 mt-3.5 space-y-3">
+                              <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none border-b border-zinc-800 pb-1.5 select-none">
+                                Cuestionario ({survey.questions?.length || 1} preguntas)
                               </span>
+                              
+                              {survey.questions && Array.isArray(survey.questions) && survey.questions.length > 0 ? (
+                                <div className="space-y-2">
+                                  {survey.questions.map((q: any, qIdx: number) => (
+                                    <div key={q.id || qIdx} className="flex flex-col gap-1">
+                                      <span className="text-[10px] font-black uppercase text-zinc-300 leading-normal">
+                                        {qIdx + 1}. {q.question}
+                                      </span>
+                                      <span className="self-start text-[7px] font-black text-primary uppercase tracking-widest px-2 py-0.5 rounded bg-primary/5 border border-primary/10 leading-none">
+                                        {q.answer_type === 'text' ? 'Texto Libre' : q.answer_type === 'number' ? 'Nota 1-10' : 'V/F'}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-[10px] font-black uppercase text-zinc-300 leading-normal">
+                                    1. {survey.question}
+                                  </span>
+                                  <span className="self-start text-[7px] font-black text-primary uppercase tracking-widest px-2 py-0.5 rounded bg-primary/5 border border-primary/10 leading-none">
+                                    {survey.answer_type === 'text' ? 'Texto Libre' : survey.answer_type === 'number' ? 'Nota 1-10' : 'V/F'}
+                                  </span>
+                                </div>
+                              )}
                             </div>
 
                             {/* WhatsApp link picker */}
@@ -1530,9 +1560,15 @@ export const AdminDashboard: React.FC = () => {
                             const name = e.metadata?.name || 'Pasajero Anónimo';
                             const email = e.metadata?.email || 'No provisto';
                             const phone = e.metadata?.phone || 'No provisto';
-                            const answer = e.metadata?.answer || '';
-                            const qText = e.metadata?.question || 'Pregunta general';
-                            const aType = e.metadata?.answer_type || 'text';
+                            
+                            // Si existen múltiples respuestas las extraemos, sino caemos en el fallback backward compatible
+                            const answers = e.metadata?.answers || [
+                              {
+                                question: e.metadata?.question || 'Pregunta general',
+                                answer: e.metadata?.answer || 'No provisto',
+                                answer_type: e.metadata?.answer_type || 'text'
+                              }
+                            ];
                             
                             const matchedSch = schools.find(s => s.id === e.school_id);
                             const schName = matchedSch ? matchedSch.name : 'General / Sin Colegio';
@@ -1559,35 +1595,41 @@ export const AdminDashboard: React.FC = () => {
                                   </div>
                                 </div>
 
-                                <div className="space-y-1.5">
-                                  <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none">Pregunta Respondida: "{qText}"</span>
-                                  
-                                  {aType === 'text' && (
-                                    <p className="text-[10px] text-zinc-300 italic font-semibold leading-relaxed border-l-2 border-primary/40 pl-2 bg-zinc-900/30 py-1.5 rounded-r-lg uppercase">
-                                      "{answer}"
-                                    </p>
-                                  )}
-
-                                  {aType === 'number' && (
-                                    <div className="flex items-center gap-2">
-                                      <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-primary text-black font-black text-xs glow-yellow">
-                                        {answer}
+                                <div className="space-y-3 pt-1 border-t border-zinc-900/40">
+                                  {answers.map((ans: any, aIdx: number) => (
+                                    <div key={aIdx} className="space-y-1">
+                                      <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none">
+                                        Pregunta #{aIdx + 1}: "{ans.question}"
                                       </span>
-                                      <span className="text-[9px] font-black uppercase text-zinc-400 font-bold">Puntuación otorgada</span>
-                                    </div>
-                                  )}
+                                      
+                                      {ans.answer_type === 'text' && (
+                                        <p className="text-[10px] text-zinc-300 italic font-semibold leading-relaxed border-l-2 border-primary/40 pl-2 bg-zinc-900/30 py-1.5 rounded-r-lg uppercase">
+                                          "{ans.answer}"
+                                        </p>
+                                      )}
 
-                                  {aType === 'boolean' && (
-                                    <div className="flex items-center gap-1.5">
-                                      <span className={`inline-block px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
-                                        answer === 'Verdadero' 
-                                          ? 'bg-emerald-950/60 border border-emerald-900/60 text-emerald-400 font-bold' 
-                                          : 'bg-red-950/60 border border-red-900/60 text-red-400 font-bold'
-                                      }`}>
-                                        {answer}
-                                      </span>
+                                      {ans.answer_type === 'number' && (
+                                        <div className="flex items-center gap-2 py-0.5">
+                                          <span className="inline-flex items-center justify-center h-6.5 w-6.5 rounded-lg bg-primary text-black font-black text-[10px] glow-yellow">
+                                            {ans.answer}
+                                          </span>
+                                          <span className="text-[8px] font-black uppercase text-zinc-400 font-bold">Puntuación otorgada</span>
+                                        </div>
+                                      )}
+
+                                      {ans.answer_type === 'boolean' && (
+                                        <div className="flex items-center gap-1.5 py-0.5">
+                                          <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                                            ans.answer === 'Verdadero' 
+                                              ? 'bg-emerald-950/60 border border-emerald-900/60 text-emerald-400 font-bold' 
+                                              : 'bg-red-950/60 border border-red-900/60 text-red-400 font-bold'
+                                          }`}>
+                                            {ans.answer}
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
+                                  ))}
                                 </div>
                               </div>
                             );
@@ -2085,33 +2127,71 @@ export const AdminDashboard: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
-                  Pregunta Central
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={surveyQuestion}
-                  onChange={(e) => setSurveyQuestion(e.target.value)}
-                  placeholder="¿Qué nota le ponés al coordinador?"
-                  className="w-full px-3.5 py-3 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none"
-                />
-              </div>
+              {/* Dynamic Questions Builder */}
+              <div className="space-y-4 pt-2 border-t border-zinc-900">
+                <div className="flex items-center justify-between">
+                  <span className="block text-[10px] font-black text-primary uppercase tracking-widest leading-none glow-text-yellow select-none">
+                    Preguntas del Cuestionario ({surveyQuestions.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSurveyQuestions(prev => [...prev, { id: `q-${Date.now()}-${prev.length + 1}`, question: '', answer_type: 'text' }])}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[8px] font-black uppercase tracking-wider text-white transition-colors"
+                  >
+                    <Plus size={10} className="text-primary" />
+                    Agregar Pregunta
+                  </button>
+                </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
-                  Tipo de Respuesta Admitido
-                </label>
-                <select
-                  value={surveyAnswerType}
-                  onChange={(e) => setSurveyAnswerType(e.target.value as any)}
-                  className="w-full px-3.5 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs font-bold focus:outline-none focus:border-primary"
-                >
-                  <option value="text">Texto Libre (Comentarios y sugerencias)</option>
-                  <option value="number">Numérica del 1 al 10 (Calificaciones)</option>
-                  <option value="boolean">Verdadero o Falso (Conformidad Sí/No)</option>
-                </select>
+                <div className="space-y-3.5 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
+                  {surveyQuestions.map((q, idx) => (
+                    <div key={q.id || idx} className="p-3.5 bg-zinc-900/60 border border-zinc-850 rounded-xl space-y-3 relative group">
+                      <div className="flex items-center justify-between gap-2 select-none">
+                        <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest leading-none">Pregunta #{idx + 1}</span>
+                        {surveyQuestions.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setSurveyQuestions(prev => prev.filter(item => item.id !== q.id))}
+                            className="p-1 rounded bg-zinc-950 hover:bg-red-950/40 border border-zinc-850 hover:border-red-900/60 text-zinc-500 hover:text-red-400 transition-colors"
+                          >
+                            <Trash2 size={10} />
+                          </button>
+                        )}
+                      </div>
+
+                      <div>
+                        <input
+                          type="text"
+                          required
+                          value={q.question}
+                          onChange={(e) => {
+                            const copy = [...surveyQuestions];
+                            copy[idx].question = e.target.value;
+                            setSurveyQuestions(copy);
+                          }}
+                          placeholder={`Ej. ¿Cómo calificarías la excursión #${idx + 1}?`}
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-955 border border-zinc-850 focus:border-primary/50 text-white text-[10px] font-semibold focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <select
+                          value={q.answer_type}
+                          onChange={(e) => {
+                            const copy = [...surveyQuestions];
+                            copy[idx].answer_type = e.target.value;
+                            setSurveyQuestions(copy);
+                          }}
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-850 text-zinc-300 text-[10px] font-bold focus:outline-none focus:border-primary"
+                        >
+                          <option value="text">Texto Libre (Comentarios y sugerencias)</option>
+                          <option value="number">Numérica del 1 al 10 (Calificaciones)</option>
+                          <option value="boolean">Verdadero o Falso (Conformidad Sí/No)</option>
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Botones de acción modal */}
