@@ -1410,9 +1410,7 @@ export const AdminDashboard: React.FC = () => {
                         onClick={() => {
                           setSurveyTitle('');
                           setSurveyDescription('');
-                          setSurveyQuestion('');
-                          setSurveyAnswerType('text');
-                          setSurveyOptions(['', '', '', '']);
+                          setSurveyQuestions([{ id: 'q-1', question: '', answer_type: 'text' }]);
                           setShowSurveyModal(true);
                         }}
                         className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/95 text-black font-black text-[10px] uppercase tracking-wider transition-colors glow-yellow"
