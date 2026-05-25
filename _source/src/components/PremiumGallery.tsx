@@ -32,6 +32,21 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [shareSuccess, setShareSuccess] = useState<boolean>(false);
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const photosPerPage = 24; // 24 photos per page
+
+  // Reset page when photo array changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [photos]);
+
+  const totalPhotos = photos.length;
+  const totalPages = Math.ceil(totalPhotos / photosPerPage);
+  const indexOfLastPhoto = currentPage * photosPerPage;
+  const indexOfFirstPhoto = indexOfLastPhoto - photosPerPage;
+  const currentPhotos = photos.slice(indexOfFirstPhoto, indexOfLastPhoto);
+
   // Handle Lightbox Navigation
   const handlePrev = (e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -148,74 +163,141 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
           </p>
         </div>
       ) : (
-        /* Dynamic Grid Layout */
-        <div className={`grid ${getGridColsClass()} gap-6 transition-all duration-500`}>
-          {photos.map((photo, index) => (
-            <div
-              key={photo.id}
-              onClick={() => setLightboxIndex(index)}
-              className="group relative aspect-square bg-zinc-900/50 rounded-xl overflow-hidden border border-zinc-900 cursor-zoom-in shadow-md hover:shadow-[0_8px_30px_rgba(0,0,0,0.8)] hover:border-primary/20 transition-all duration-300"
-            >
-              {/* Image element */}
-              <img
-                src={photo.url_web}
-                alt={`${schoolName} - Recuerdos`}
-                loading="lazy"
-                className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-              />
+        <div className="space-y-12">
+          {/* Dynamic Grid Layout */}
+          <div className={`grid ${getGridColsClass()} gap-6 transition-all duration-500`}>
+            {currentPhotos.map((photo) => {
+              const originalIndex = photos.findIndex((p) => p.id === photo.id);
+              return (
+                <div
+                  key={photo.id}
+                  onClick={() => setLightboxIndex(originalIndex)}
+                  className="group relative aspect-square bg-zinc-900/50 rounded-xl overflow-hidden border border-zinc-900 cursor-zoom-in shadow-md hover:shadow-[0_8px_30px_rgba(0,0,0,0.8)] hover:border-primary/20 transition-all duration-300"
+                >
+                  {/* Image element */}
+                  <img
+                    src={photo.url_web}
+                    alt={`${schoolName} - Recuerdos`}
+                    loading="lazy"
+                    className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                  />
 
-              {/* Hover Dark Overlay Shield */}
-              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-zinc-950/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4" style={{ pointerEvents: 'auto' }}>
-                
-                {/* Top card bar (Brand watermark) */}
-                <div className="flex justify-between items-start">
-                  <span className="text-[9px] font-black text-black bg-primary px-2.5 py-0.5 rounded-full uppercase tracking-wider glow-yellow font-outfit">
-                    SuperTour
-                  </span>
-                  
-                  {/* Share action floating button */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={(e) => copyPhotoLink(photo.url_hd, photo.id, e)}
-                      className="p-1.5 rounded-md bg-zinc-950/60 hover:bg-zinc-900 text-white border border-zinc-800 hover:border-zinc-700 transition-all"
-                      title="Copiar Enlace HD"
-                    >
-                      {copiedId === photo.id ? <Check size={12} className="text-primary" /> : <Copy size={12} />}
-                    </button>
-                    <button
-                      onClick={(e) => shareOnWhatsApp(photo.url_hd, e)}
-                      className="p-1.5 rounded-md bg-zinc-950/60 hover:bg-zinc-900 text-white border border-zinc-800 hover:border-zinc-700 transition-all"
-                      title="Compartir WhatsApp"
-                    >
-                      <Share2 size={12} />
-                    </button>
-                  </div>
-                </div>
+                  {/* Hover Dark Overlay Shield */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-zinc-950/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4" style={{ pointerEvents: 'auto' }}>
+                    
+                    {/* Top card bar (Brand watermark) */}
+                    <div className="flex justify-between items-start">
+                      <span className="text-[9px] font-black text-black bg-primary px-2.5 py-0.5 rounded-full uppercase tracking-wider glow-yellow font-outfit">
+                        SuperTour
+                      </span>
+                      
+                      {/* Share action floating button */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={(e) => copyPhotoLink(photo.url_hd, photo.id, e)}
+                          className="p-1.5 rounded-md bg-zinc-950/60 hover:bg-zinc-900 text-white border border-zinc-800 hover:border-zinc-700 transition-all"
+                          title="Copiar Enlace HD"
+                        >
+                          {copiedId === photo.id ? <Check size={12} className="text-primary" /> : <Copy size={12} />}
+                        </button>
+                        <button
+                          onClick={(e) => shareOnWhatsApp(photo.url_hd, e)}
+                          className="p-1.5 rounded-md bg-zinc-950/60 hover:bg-zinc-900 text-white border border-zinc-800 hover:border-zinc-700 transition-all"
+                          title="Compartir WhatsApp"
+                        >
+                          <Share2 size={12} />
+                        </button>
+                      </div>
+                    </div>
 
-                {/* Bottom card bar (Expand / Download triggers) */}
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                    Foto {index + 1}
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        downloadFileDirectly(photo.url_hd, `SuperTour-${schoolName}-${index + 1}.jpg`);
-                      }}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/95 text-black text-[10px] font-black uppercase tracking-wider transition-all shadow-[0_0_12px_rgba(250,204,21,0.2)]"
-                    >
-                      <Download size={10} />
-                      Descargar HD
-                    </button>
-                    <div className="p-2 rounded-lg bg-zinc-900/60 hover:bg-zinc-900 text-white border border-zinc-800 transition-colors">
-                      <Maximize2 size={12} />
+                    {/* Bottom card bar (Expand / Download triggers) */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                        Foto {originalIndex + 1}
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            downloadFileDirectly(photo.url_hd, `SuperTour-${schoolName}-${originalIndex + 1}.jpg`);
+                          }}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/95 text-black text-[10px] font-black uppercase tracking-wider transition-all shadow-[0_0_12px_rgba(250,204,21,0.2)]"
+                        >
+                          <Download size={10} />
+                          Descargar HD
+                        </button>
+                        <div className="p-2 rounded-lg bg-zinc-900/60 hover:bg-zinc-900 text-white border border-zinc-800 transition-colors">
+                          <Maximize2 size={12} />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+
+          {/* Premium Gallery Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-10 mt-6 border-t border-zinc-900 select-none">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none">
+                Mostrando {indexOfFirstPhoto + 1} - {Math.min(indexOfLastPhoto, totalPhotos)} de {totalPhotos} recuerdos
+              </span>
+
+              <div className="flex items-center gap-1.5">
+                {/* Prev Button */}
+                <button
+                  onClick={() => {
+                    if (currentPage > 1) {
+                      setCurrentPage(currentPage - 1);
+                      window.scrollTo({ top: document.getElementById('destinos')?.offsetTop || 350, behavior: 'smooth' });
+                    }
+                  }}
+                  disabled={currentPage === 1}
+                  className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 disabled:opacity-20 disabled:hover:bg-zinc-900 text-white border border-zinc-850 hover:border-zinc-700 transition-all cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+
+                {/* Page Numbers */}
+                {Array.from({ length: totalPages }).map((_, i) => {
+                  const pageNum = i + 1;
+                  const isActive = currentPage === pageNum;
+
+                  return (
+                    <button
+                      key={`gallery-page-${pageNum}`}
+                      onClick={() => {
+                        setCurrentPage(pageNum);
+                        window.scrollTo({ top: document.getElementById('destinos')?.offsetTop || 350, behavior: 'smooth' });
+                      }}
+                      className={`w-9.5 h-9.5 rounded-xl text-xs font-black uppercase transition-all tracking-wider ${
+                        isActive
+                          ? 'bg-primary text-black border border-primary glow-yellow'
+                          : 'bg-zinc-900 border border-zinc-850 text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-zinc-700'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+
+                {/* Next Button */}
+                <button
+                  onClick={() => {
+                    if (currentPage < totalPages) {
+                      setCurrentPage(currentPage + 1);
+                      window.scrollTo({ top: document.getElementById('destinos')?.offsetTop || 350, behavior: 'smooth' });
+                    }
+                  }}
+                  disabled={currentPage === totalPages}
+                  className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 disabled:opacity-20 disabled:hover:bg-zinc-900 text-white border border-zinc-850 hover:border-zinc-700 transition-all cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <ChevronRight size={16} />
+                </button>
               </div>
             </div>
-          ))}
+          )}
         </div>
       )}
 
