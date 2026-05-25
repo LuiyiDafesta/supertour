@@ -252,16 +252,20 @@ export const SchoolDetailPage: React.FC = () => {
 
             {/* Quick Actions (Downloads) */}
             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-              <a
-                href={school.multimedia_url}
-                download={`SuperTour-${school.name}-Multimedia.zip`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 font-black text-xs uppercase tracking-wider text-white transition-all duration-300 w-full sm:w-auto"
-              >
-                <Film size={16} className="text-primary" />
-                Descargar Video del Viaje
-              </a>
+              {school.multimedia_url && 
+               school.multimedia_url.trim() !== '' && 
+               school.multimedia_url !== 'https://demo.backblaze.com/download/viaje.zip' && (
+                <a
+                  href={school.multimedia_url}
+                  download={`SuperTour-${school.name}-Multimedia.zip`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 font-black text-xs uppercase tracking-wider text-white transition-all duration-300 w-full sm:w-auto"
+                >
+                  <Film size={16} className="text-primary" />
+                  Descargar Video del Viaje
+                </a>
+              )}
               
               <button
                 onClick={() => downloadFileDirectly(school.group_photo_hd, `SuperTour-${school.name}-FotoGrupal.jpg`)}
