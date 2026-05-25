@@ -25,7 +25,9 @@ import {
   Image as ImageIcon,
   Film,
   X,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Mail,
+  Phone
 } from 'lucide-react';
 import { useSEO } from '../hooks/useSEO';
 import { compressImage } from '../lib/imageCompressor';
