@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar as CalendarIcon, MapPin, Sparkles, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { School } from '../types/database';
+import { trackEvent } from '../lib/analytics';
 
 interface PremiumCalendarProps {
   destination: 'Mar del Plata' | 'Villa Carlos Paz';
@@ -294,6 +295,17 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
                   onClick={() => {
                     if (hasTrips) {
                       setSelectedDay(dayNum);
+                      
+                      // Track calendar day clicks in real-time
+                      const daySchools = getSchoolsForDay(dayNum);
+                      daySchools.forEach((school) => {
+                        trackEvent({
+                          event_type: 'calendar_click',
+                          school_id: school.id,
+                          destination: school.destination,
+                          metadata: { date: `${currentMonth.year}-${currentMonth.monthStr}-${dayNum < 10 ? '0' + dayNum : dayNum}` }
+                        });
+                      });
                     }
                   }}
                   disabled={!hasTrips && loading}

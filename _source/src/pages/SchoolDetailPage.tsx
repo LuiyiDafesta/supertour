@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { School, GalleryPhoto } from '../types/database';
 import { downloadFileDirectly } from '../lib/downloader';
+import { trackEvent } from '../lib/analytics';
 import { Navbar } from '../components/Navbar';
 import { PremiumGallery } from '../components/PremiumGallery';
 import { ArrowLeft, Download, Film, Users, Image as ImageIcon, MapPin, Calendar, Share2, Sparkles } from 'lucide-react';
@@ -16,6 +17,12 @@ export const SchoolDetailPage: React.FC = () => {
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [shareText, setShareText] = useState('Compartir');
+
+  // Survey states
+  const [activeSurvey, setActiveSurvey] = useState<any | null>(null);
+  const [hasVoted, setHasVoted] = useState(false);
+  const [votedOption, setVotedOption] = useState<string | null>(null);
+  const [surveyVotesTotal, setSurveyVotesTotal] = useState(0);
 
   useSEO({
     title: school ? `Fotos de ${school.name}` : 'Cargando Galería',
@@ -111,6 +118,13 @@ export const SchoolDetailPage: React.FC = () => {
         if (schoolData) {
           setSchool(schoolData as School);
           
+          // Track school view in real-time
+          trackEvent({
+            event_type: 'school_view',
+            school_id: id,
+            destination: schoolData.destination
+          });
+          
           // 2. Fetch School Photos
           const { data: photoData, error: photoError } = await supabase
             .from('gallery_photos')
@@ -131,12 +145,26 @@ export const SchoolDetailPage: React.FC = () => {
         console.warn('Database error, loading mock school data details page.');
         // Fallback to local mock data matching ID
         if (id && mockSchoolsMap[id]) {
-          setSchool(mockSchoolsMap[id]);
+          const s = mockSchoolsMap[id];
+          setSchool(s);
           setPhotos(mockPhotos);
+          
+          trackEvent({
+            event_type: 'school_view',
+            school_id: id,
+            destination: s.destination
+          });
         } else {
           // Fallback to general mockup
-          setSchool(mockSchoolsMap['mock-school-1']);
+          const s = mockSchoolsMap['mock-school-1'];
+          setSchool(s);
           setPhotos(mockPhotos);
+          
+          trackEvent({
+            event_type: 'school_view',
+            school_id: s.id,
+            destination: s.destination
+          });
         }
       } finally {
         setLoading(false);
@@ -146,6 +174,167 @@ export const SchoolDetailPage: React.FC = () => {
     fetchSchoolData();
     window.scrollTo(0, 0);
   }, [id]);
+
+  useEffect(() => {
+    const loadSurvey = async () => {
+      try {
+        // Try fetching active survey from Supabase
+        const { data, error } = await supabase
+          .from('surveys')
+          .select('*')
+          .eq('active', true)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        let survey = data;
+        if (!survey) {
+          // Fallback to local storage or mock survey
+          const localSurveysRaw = localStorage.getItem('supertour_local_surveys');
+          const localSurveys = localSurveysRaw ? JSON.parse(localSurveysRaw) : null;
+          if (localSurveys && localSurveys.length > 0) {
+            survey = localSurveys.find((s: any) => s.active) || localSurveys[0];
+          } else {
+            // Default mock survey
+            survey = {
+              id: 'survey-1',
+              question: '¿Cuál fue la excursión más emocionante del viaje?',
+              options: [
+                { text: 'Parque de Aventura Pekos', votes: 145 },
+                { text: 'Aerosilla Carlos Paz', votes: 89 },
+                { text: 'Rafting en el Río Suquía', votes: 202 },
+                { text: 'Senderismo en las Sierras', votes: 41 }
+              ],
+              active: true,
+              created_at: '2026-05-20'
+            };
+          }
+        }
+
+        if (survey) {
+          setActiveSurvey(survey);
+          
+          // Check if passenger already voted
+          const voted = localStorage.getItem(`supertour_voted_survey_${survey.id}`);
+          if (voted) {
+            setHasVoted(true);
+            setVotedOption(voted);
+          }
+          
+          const total = survey.options.reduce((sum: number, o: any) => sum + o.votes, 0);
+          setSurveyVotesTotal(total);
+        }
+      } catch (err) {
+        console.warn('Error fetching survey, using default mock survey.');
+        const mockSurvey = {
+          id: 'survey-1',
+          question: '¿Cuál fue la excursión más emocionante del viaje?',
+          options: [
+            { text: 'Parque de Aventura Pekos', votes: 145 },
+            { text: 'Aerosilla Carlos Paz', votes: 89 },
+            { text: 'Rafting en el Río Suquía', votes: 202 },
+            { text: 'Senderismo en las Sierras', votes: 41 }
+          ],
+          active: true,
+          created_at: '2026-05-20'
+        };
+        setActiveSurvey(mockSurvey);
+        const voted = localStorage.getItem(`supertour_voted_survey_${mockSurvey.id}`);
+        if (voted) {
+          setHasVoted(true);
+          setVotedOption(voted);
+        }
+        const total = mockSurvey.options.reduce((sum: number, o: any) => sum + o.votes, 0);
+        setSurveyVotesTotal(total);
+      }
+    };
+    loadSurvey();
+  }, [id]);
+
+  const handleVote = async (optionText: string) => {
+    if (hasVoted || !activeSurvey || !school) return;
+
+    // 1. Guardar localmente para evitar doble voto
+    localStorage.setItem(`supertour_voted_survey_${activeSurvey.id}`, optionText);
+    setHasVoted(true);
+    setVotedOption(optionText);
+
+    // 2. Incrementar votos en el estado en caliente
+    const updatedOptions = activeSurvey.options.map((opt: any) => 
+      opt.text === optionText ? { ...opt, votes: opt.votes + 1 } : opt
+    );
+    const updatedSurvey = { ...activeSurvey, options: updatedOptions };
+    setActiveSurvey(updatedSurvey);
+    setSurveyVotesTotal(prev => prev + 1);
+
+    // 3. Registrar el evento analítico de voto en tiempo real
+    trackEvent({
+      event_type: 'survey_vote',
+      school_id: school.id,
+      destination: school.destination,
+      metadata: {
+        survey_id: activeSurvey.id,
+        option: optionText
+      }
+    });
+
+    // 4. Intentar persistir en Supabase o en localStorage
+    try {
+      const { error } = await supabase
+        .from('surveys')
+        .update({ options: updatedOptions })
+        .eq('id', activeSurvey.id);
+
+      if (error) throw error;
+    } catch (dbErr) {
+      console.warn('No se pudo persistir el voto en Supabase, guardando en cache local:', dbErr);
+      
+      // Actualizar en localStorage el listado local de encuestas
+      try {
+        const localSurveysRaw = localStorage.getItem('supertour_local_surveys');
+        let localSurveys = localSurveysRaw ? JSON.parse(localSurveysRaw) : [];
+        
+        // Si no existen encuestas locales aún, agregamos las mock
+        if (localSurveys.length === 0) {
+          localSurveys = [
+            {
+              id: 'survey-1',
+              question: '¿Cuál fue la excursión más emocionante del viaje?',
+              options: [
+                { text: 'Parque de Aventura Pekos', votes: 145 },
+                { text: 'Aerosilla Carlos Paz', votes: 89 },
+                { text: 'Rafting en el Río Suquía', votes: 202 },
+                { text: 'Senderismo en las Sierras', votes: 41 }
+              ],
+              active: true,
+              created_at: '2026-05-20'
+            },
+            {
+              id: 'survey-2',
+              question: '¿Qué boliche / matiné premium tuvo la mejor fiesta?',
+              options: [
+                { text: 'Khalama Disco', votes: 312 },
+                { text: 'Keops El Templo', votes: 278 },
+                { text: 'Molino Rojo', votes: 198 }
+              ],
+              active: false,
+              created_at: '2026-05-22'
+            }
+          ];
+        }
+
+        const surveyIndex = localSurveys.findIndex((s: any) => s.id === activeSurvey.id);
+        if (surveyIndex !== -1) {
+          localSurveys[surveyIndex].options = updatedOptions;
+        } else {
+          localSurveys.push(updatedSurvey);
+        }
+        localStorage.setItem('supertour_local_surveys', JSON.stringify(localSurveys));
+      } catch (err) {
+        console.error('Error al actualizar encuestas locales:', err);
+      }
+    }
+  };
 
   const handleShare = async () => {
     try {
@@ -312,6 +501,85 @@ export const SchoolDetailPage: React.FC = () => {
             </div>
           </div>
         </section>
+
+        {/* Survey Segment */}
+        {activeSurvey && (
+          <section className="mb-16 select-none">
+            <div className="text-center md:text-left mb-6">
+              <span className="text-xs font-bold text-primary tracking-[0.25em] uppercase glow-text-yellow">
+                Interactividad
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-white mt-1 uppercase tracking-tight flex items-center justify-center md:justify-start gap-2">
+                <Sparkles size={20} className="text-primary animate-pulse" />
+                La Encuesta del Viaje
+              </h2>
+              <p className="text-zinc-500 text-xs sm:text-sm mt-1">
+                Participá y dejá tu voto para definir la mejor experiencia de tu viaje de egresados.
+              </p>
+            </div>
+
+            <div className="glass-card rounded-3xl overflow-hidden p-6 sm:p-8 border border-zinc-800/40 shadow-premium bg-zinc-950/80 relative">
+              <div className="absolute top-0 right-0 h-32 w-32 bg-primary/5 blur-3xl rounded-full pointer-events-none" />
+              
+              <div className="max-w-2xl mx-auto space-y-6">
+                <h3 className="text-lg sm:text-xl font-black uppercase text-center text-white tracking-tight leading-snug">
+                  {activeSurvey.question}
+                </h3>
+
+                {!hasVoted ? (
+                  <div className="grid sm:grid-cols-2 gap-4 pt-2">
+                    {activeSurvey.options.map((option: any, idx: number) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleVote(option.text)}
+                        className="p-4 rounded-2xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800/80 hover:border-primary/50 text-left text-zinc-300 hover:text-white font-bold text-xs sm:text-sm uppercase tracking-wider transition-all duration-300 transform hover:scale-[1.02] flex items-center justify-between group shadow-sm active:scale-95"
+                      >
+                        <span className="truncate max-w-[85%]">{option.text}</span>
+                        <span className="h-5 w-5 rounded-full border border-zinc-700 group-hover:border-primary flex items-center justify-center flex-shrink-0">
+                          <span className="h-2 w-2 rounded-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-4 pt-2">
+                    {activeSurvey.options.map((option: any, idx: number) => {
+                      const isOptionVoted = votedOption === option.text;
+                      const percentage = surveyVotesTotal > 0 ? Math.round((option.votes / surveyVotesTotal) * 100) : 0;
+                      
+                      return (
+                        <div key={idx} className="space-y-2">
+                          <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-zinc-400">
+                            <span className="flex items-center gap-1.5 truncate max-w-[70%]">
+                              {option.text}
+                              {isOptionVoted && (
+                                <span className="inline-block px-2 py-0.5 rounded-full bg-primary/20 border border-primary/30 text-[8px] font-black text-primary uppercase tracking-widest leading-none glow-yellow">
+                                  Tu Voto
+                                </span>
+                              )}
+                            </span>
+                            <span className="font-mono text-zinc-300 font-bold">{option.votes} {option.votes === 1 ? 'voto' : 'votos'} ({percentage}%)</span>
+                          </div>
+                          <div className="w-full h-3.5 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800 relative shadow-inner">
+                            <div 
+                              className="h-full rounded-full bg-gradient-to-r from-yellow-500 to-primary transition-all duration-1000 ease-out glow-yellow" 
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    <div className="text-center pt-4 border-t border-zinc-900 flex flex-col sm:flex-row justify-between items-center text-[10px] text-zinc-500 font-bold uppercase tracking-wider gap-2">
+                      <span>Total de respuestas: {surveyVotesTotal} pasajeros</span>
+                      <span className="text-emerald-400">✓ Tu voto fue registrado en vivo</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Gallery Segment */}
         <section>

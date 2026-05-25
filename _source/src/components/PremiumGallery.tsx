@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GalleryPhoto } from '../types/database';
 import { downloadFileDirectly } from '../lib/downloader';
+import { trackEvent } from '../lib/analytics';
 import { 
   Download, 
   Share2, 
@@ -171,7 +172,14 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
               return (
                 <div
                   key={photo.id}
-                  onClick={() => setLightboxIndex(originalIndex)}
+                  onClick={() => {
+                    setLightboxIndex(originalIndex);
+                    trackEvent({
+                      event_type: 'photo_click',
+                      school_id: photo.school_id,
+                      metadata: { photo_id: photo.id }
+                    });
+                  }}
                   className="group relative aspect-square bg-zinc-900/50 rounded-xl overflow-hidden border border-zinc-900 cursor-zoom-in shadow-md hover:shadow-[0_8px_30px_rgba(0,0,0,0.8)] hover:border-primary/20 transition-all duration-300"
                 >
                   {/* Image element */}
@@ -220,6 +228,11 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
                           onClick={(e) => {
                             e.stopPropagation();
                             downloadFileDirectly(photo.url_hd, `SuperTour-${schoolName}-${originalIndex + 1}.jpg`);
+                            trackEvent({
+                              event_type: 'photo_download',
+                              school_id: photo.school_id,
+                              metadata: { photo_id: photo.id, size: 'HD' }
+                            });
                           }}
                           className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/95 text-black text-[10px] font-black uppercase tracking-wider transition-all shadow-[0_0_12px_rgba(250,204,21,0.2)]"
                         >
@@ -366,6 +379,11 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
               onClick={(e) => {
                 e.stopPropagation();
                 downloadFileDirectly(photos[lightboxIndex].url_hd, `SuperTour-${schoolName}-${lightboxIndex + 1}.jpg`);
+                trackEvent({
+                  event_type: 'photo_download',
+                  school_id: photos[lightboxIndex].school_id,
+                  metadata: { photo_id: photos[lightboxIndex].id, size: 'HD', context: 'lightbox' }
+                });
               }}
               className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-primary hover:bg-primary/95 text-black text-xs font-black uppercase tracking-wider transition-all glow-yellow"
             >
