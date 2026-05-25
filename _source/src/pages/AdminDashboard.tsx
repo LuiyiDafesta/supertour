@@ -2273,7 +2273,7 @@ export const AdminDashboard: React.FC = () => {
                             setSurveyQuestions(copy);
                           }}
                           placeholder={`Ej. ¿Cómo calificarías la excursión #${idx + 1}?`}
-                          className="w-full px-3 py-2 rounded-lg bg-zinc-955 border border-zinc-855 focus:border-primary/50 text-white text-[10px] font-semibold focus:outline-none"
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-[10px] font-semibold focus:outline-none"
                         />
                       </div>
 
@@ -2322,7 +2322,7 @@ export const AdminDashboard: React.FC = () => {
       {showResponseModal && selectedResponse && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity">
           <div 
-            className="relative w-full max-w-xl border border-zinc-800 rounded-2xl bg-zinc-955 shadow-premium overflow-hidden transform transition-all flex flex-col max-h-[90vh]"
+            className="relative w-full max-w-xl border border-zinc-800 rounded-2xl bg-zinc-950 shadow-premium overflow-hidden transform transition-all flex flex-col max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header Modal */}

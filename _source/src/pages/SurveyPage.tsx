@@ -239,21 +239,45 @@ export const SurveyPage: React.FC = () => {
     }
 
     if (targetWebhookUrl && targetWebhookUrl.trim() !== '') {
-      console.log('[SuperTour CRM] Disparando webhook de CRM:', targetWebhookUrl);
+      let formattedUrl = targetWebhookUrl.trim();
+      if (!/^https?:\/\//i.test(formattedUrl)) {
+        formattedUrl = 'https://' + formattedUrl;
+      }
+      
+      console.log('[SuperTour CRM] Disparando webhook de CRM:', formattedUrl);
       
       try {
         // IMPORTANTE: Await el fetch para asegurar que el navegador envíe la petición completa
         // antes de actualizar el estado de React y re-renderizar la UI (evitando cancelaciones del navegador).
-        await fetch(targetWebhookUrl, {
+        console.log('[SuperTour CRM] Intentando enviar con application/json...');
+        const response = await fetch(formattedUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(payload)
         });
-        console.log('[SuperTour CRM] Webhook despachado con éxito.');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        console.log('[SuperTour CRM] Webhook despachado con éxito (JSON).');
       } catch (webhookErr) {
-        console.warn('Error en la llamada del webhook de n8n:', webhookErr);
+        console.warn('[SuperTour CRM] Falló envío JSON (posible bloqueo CORS). Reintentando bypass CORS con text/plain...', webhookErr);
+        try {
+          // Fallback con bypass de preflight CORS (Content-Type simple y mode no-cors)
+          await fetch(formattedUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: {
+              'Content-Type': 'text/plain'
+            },
+            body: JSON.stringify(payload)
+          });
+          console.log('[SuperTour CRM] Webhook despachado con éxito (Bypass CORS / Text).');
+        } catch (retryErr) {
+          console.error('[SuperTour CRM] Error crítico al despachar webhook:', retryErr);
+        }
       }
     }
 
