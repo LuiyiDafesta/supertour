@@ -6,7 +6,7 @@ import { downloadFileDirectly } from '../lib/downloader';
 import { trackEvent } from '../lib/analytics';
 import { Navbar } from '../components/Navbar';
 import { PremiumGallery } from '../components/PremiumGallery';
-import { ArrowLeft, Download, Film, Users, Image as ImageIcon, MapPin, Calendar, Share2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Download, Film, Users, Image as ImageIcon, MapPin, Calendar, Share2, Sparkles, Send, CheckCircle2 } from 'lucide-react';
 import { Footer } from '../components/Footer';
 import { useSEO } from '../hooks/useSEO';
 
@@ -504,7 +504,7 @@ export const SchoolDetailPage: React.FC = () => {
 
         {/* Survey Segment */}
         {activeSurvey && (
-          <section className="mb-16 select-none">
+          <section className="mb-16 select-none animate-fade-in">
             <div className="text-center md:text-left mb-6">
               <span className="text-xs font-bold text-primary tracking-[0.25em] uppercase glow-text-yellow">
                 Interactividad
@@ -514,67 +514,42 @@ export const SchoolDetailPage: React.FC = () => {
                 La Encuesta del Viaje
               </h2>
               <p className="text-zinc-500 text-xs sm:text-sm mt-1">
-                Participá y dejá tu voto para definir la mejor experiencia de tu viaje de egresados.
+                Participá y dejanos tus opiniones para mejorar las próximas experiencias de egresados.
               </p>
             </div>
 
-            <div className="glass-card rounded-3xl overflow-hidden p-6 sm:p-8 border border-zinc-800/40 shadow-premium bg-zinc-950/80 relative">
-              <div className="absolute top-0 right-0 h-32 w-32 bg-primary/5 blur-3xl rounded-full pointer-events-none" />
+            <div className="glass-card rounded-3xl border border-zinc-800/40 p-6 sm:p-8 bg-zinc-950/80 shadow-premium relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="absolute top-0 right-0 h-32 w-32 bg-primary/5 blur-[80px] rounded-full pointer-events-none" />
               
-              <div className="max-w-2xl mx-auto space-y-6">
-                <h3 className="text-lg sm:text-xl font-black uppercase text-center text-white tracking-tight leading-snug">
-                  {activeSurvey.question}
+              <div className="space-y-2 max-w-xl">
+                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-[9px] font-black text-primary uppercase tracking-widest leading-none glow-yellow">
+                  <Sparkles size={10} />
+                  Opción de Pasajeros
+                </div>
+                <h3 className="text-lg font-black uppercase text-white tracking-tight leading-snug">
+                  {activeSurvey.title}
                 </h3>
+                <p className="text-[10px] sm:text-xs text-zinc-400 font-semibold uppercase leading-normal tracking-wide">
+                  {hasVoted 
+                    ? '¡Muchas gracias! Ya registramos tu valiosa respuesta para esta encuesta. Tu opinión nos ayuda a brindarte el mejor servicio de SuperTour.'
+                    : activeSurvey.description || 'Por favor participá de esta breve encuesta interactiva de tu viaje de egresados.'}
+                </p>
+              </div>
 
-                {!hasVoted ? (
-                  <div className="grid sm:grid-cols-2 gap-4 pt-2">
-                    {activeSurvey.options.map((option: any, idx: number) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleVote(option.text)}
-                        className="p-4 rounded-2xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800/80 hover:border-primary/50 text-left text-zinc-300 hover:text-white font-bold text-xs sm:text-sm uppercase tracking-wider transition-all duration-300 transform hover:scale-[1.02] flex items-center justify-between group shadow-sm active:scale-95"
-                      >
-                        <span className="truncate max-w-[85%]">{option.text}</span>
-                        <span className="h-5 w-5 rounded-full border border-zinc-700 group-hover:border-primary flex items-center justify-center flex-shrink-0">
-                          <span className="h-2 w-2 rounded-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </span>
-                      </button>
-                    ))}
+              <div className="flex-shrink-0">
+                {hasVoted ? (
+                  <div className="px-5 py-3.5 rounded-xl bg-emerald-950/40 border border-emerald-900/60 text-emerald-400 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md">
+                    <CheckCircle2 size={15} />
+                    Encuesta Respondida ✓
                   </div>
                 ) : (
-                  <div className="space-y-4 pt-2">
-                    {activeSurvey.options.map((option: any, idx: number) => {
-                      const isOptionVoted = votedOption === option.text;
-                      const percentage = surveyVotesTotal > 0 ? Math.round((option.votes / surveyVotesTotal) * 100) : 0;
-                      
-                      return (
-                        <div key={idx} className="space-y-2">
-                          <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-zinc-400">
-                            <span className="flex items-center gap-1.5 truncate max-w-[70%]">
-                              {option.text}
-                              {isOptionVoted && (
-                                <span className="inline-block px-2 py-0.5 rounded-full bg-primary/20 border border-primary/30 text-[8px] font-black text-primary uppercase tracking-widest leading-none glow-yellow">
-                                  Tu Voto
-                                </span>
-                              )}
-                            </span>
-                            <span className="font-mono text-zinc-300 font-bold">{option.votes} {option.votes === 1 ? 'voto' : 'votos'} ({percentage}%)</span>
-                          </div>
-                          <div className="w-full h-3.5 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800 relative shadow-inner">
-                            <div 
-                              className="h-full rounded-full bg-gradient-to-r from-yellow-500 to-primary transition-all duration-1000 ease-out glow-yellow" 
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                    <div className="text-center pt-4 border-t border-zinc-900 flex flex-col sm:flex-row justify-between items-center text-[10px] text-zinc-500 font-bold uppercase tracking-wider gap-2">
-                      <span>Total de respuestas: {surveyVotesTotal} pasajeros</span>
-                      <span className="text-emerald-400">✓ Tu voto fue registrado en vivo</span>
-                    </div>
-                  </div>
+                  <button
+                    onClick={() => navigate(`/encuesta/${activeSurvey.id}?schoolId=${school.id}`)}
+                    className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-[1.03] glow-yellow shadow-md"
+                  >
+                    <Send size={13} />
+                    Responder Encuesta
+                  </button>
                 )}
               </div>
             </div>

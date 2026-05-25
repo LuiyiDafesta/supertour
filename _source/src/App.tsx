@@ -4,6 +4,7 @@ import { LandingPage } from './pages/LandingPage';
 import { SchoolDetailPage } from './pages/SchoolDetailPage';
 import { AdminLogin } from './pages/AdminLogin';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { SurveyPage } from './pages/SurveyPage';
 import { AnalyticsTracker } from './components/AnalyticsTracker';
 import { Toaster } from 'sonner';
 
@@ -16,6 +17,7 @@ function App() {
         <Route path="/colegio/:id" element={<SchoolDetailPage />} />
         <Route path="/login" element={<AdminLogin />} />
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/encuesta/:surveyId" element={<SurveyPage />} />
       </Routes>
       <Toaster position="top-center" theme="dark" closeButton />
     </Router>

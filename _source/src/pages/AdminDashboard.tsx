@@ -79,31 +79,42 @@ export const AdminDashboard: React.FC = () => {
   const [surveys, setSurveys] = useState<any[]>([
     {
       id: 'survey-1',
-      question: '¿Cuál fue la excursión más emocionante del viaje?',
-      options: [
-        { text: 'Parque de Aventura Pekos', votes: 145 },
-        { text: 'Aerosilla Carlos Paz', votes: 89 },
-        { text: 'Rafting en el Río Suquía', votes: 202 },
-        { text: 'Senderismo en las Sierras', votes: 41 }
-      ],
+      title: 'Tu Opinión sobre el Viaje',
+      description: 'Queremos saber qué tal te pareció la excursión premium a Pekos y qué podemos mejorar.',
+      question: 'Dejanos tus comentarios sobre lo que más te gustó y qué mejorarías para los próximos grupos:',
+      answer_type: 'text',
       active: true,
       created_at: '2026-05-20'
     },
     {
       id: 'survey-2',
-      question: '¿Qué boliche / matiné premium tuvo la mejor fiesta?',
-      options: [
-        { text: 'Khalama Disco', votes: 312 },
-        { text: 'Keops El Templo', votes: 278 },
-        { text: 'Molino Rojo', votes: 198 }
-      ],
+      title: 'Puntuación del Coordinador',
+      description: 'Calificá el desempeño general de tu coordinador asignado durante toda la estadía.',
+      question: '¿Qué nota le ponés al servicio y acompañamiento del coordinador?',
+      answer_type: 'number',
       active: false,
       created_at: '2026-05-22'
+    },
+    {
+      id: 'survey-3',
+      title: '¿Volverías a viajar con nosotros?',
+      description: 'Queremos saber si cumplimos tus expectativas en este viaje de egresados.',
+      question: '¿SuperTourChannel cumplió tus expectativas?',
+      answer_type: 'boolean',
+      active: false,
+      created_at: '2026-05-23'
     }
   ]);
   const [showSurveyModal, setShowSurveyModal] = useState(false);
+  const [surveyTitle, setSurveyTitle] = useState('');
+  const [surveyDescription, setSurveyDescription] = useState('');
   const [surveyQuestion, setSurveyQuestion] = useState('');
+  const [surveyAnswerType, setSurveyAnswerType] = useState<'text' | 'number' | 'boolean'>('text');
   const [surveyOptions, setSurveyOptions] = useState<string[]>(['', '', '', '']);
+
+  // Webhook states
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [savingWebhook, setSavingWebhook] = useState(false);
 
   // Live Telemetry states
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[]>([]);
@@ -237,6 +248,22 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  // Load webhook setting
+  const loadWebhookSetting = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('supertour_settings')
+        .select('value')
+        .eq('key', 'n8n_webhook_url')
+        .maybeSingle();
+      if (!error && data) {
+        setWebhookUrl(data.value);
+      }
+    } catch (err) {
+      console.warn('Error loading webhook url setting from DB.');
+    }
+  };
+
   useEffect(() => {
     loadSchools();
     loadSurveys();
@@ -244,6 +271,9 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     if (activeTab === 'metricas') {
+      loadAnalytics();
+    } else if (activeTab === 'encuestas') {
+      loadWebhookSetting();
       loadAnalytics();
     }
   }, [activeTab]);
@@ -408,11 +438,14 @@ export const AdminDashboard: React.FC = () => {
   // Manejador para crear una nueva encuesta (Supabase con fallback local)
   const handleCreateSurvey = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!surveyQuestion.trim()) return;
+    if (!surveyQuestion.trim() || !surveyTitle.trim()) return;
 
     const newSurvey = {
+      title: surveyTitle,
+      description: surveyDescription || 'Por favor participá de esta encuesta del viaje.',
       question: surveyQuestion,
-      options: surveyOptions.filter(o => o.trim() !== '').map(o => ({ text: o, votes: 0 })),
+      answer_type: surveyAnswerType,
+      options: [],
       active: false
     };
 
@@ -425,7 +458,7 @@ export const AdminDashboard: React.FC = () => {
       if (error) throw error;
       
       setSurveys(prev => [data, ...prev]);
-      setSuccessMsg(`Encuesta "${surveyQuestion}" creada correctamente en Supabase.`);
+      setSuccessMsg(`Encuesta "${surveyTitle}" creada correctamente en Supabase.`);
     } catch (dbErr) {
       console.warn('No se pudo guardar la encuesta en la base de datos, guardando localmente:', dbErr);
       const offlineSurvey = {
@@ -436,12 +469,14 @@ export const AdminDashboard: React.FC = () => {
       const updatedSurveys = [offlineSurvey, ...surveys];
       setSurveys(updatedSurveys);
       localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedSurveys));
-      setSuccessMsg(`[Modo Offline] Encuesta "${surveyQuestion}" registrada localmente.`);
+      setSuccessMsg(`[Modo Offline] Encuesta "${surveyTitle}" registrada localmente.`);
     }
 
     setShowSurveyModal(false);
+    setSurveyTitle('');
+    setSurveyDescription('');
     setSurveyQuestion('');
-    setSurveyOptions(['', '', '', '']);
+    setSurveyAnswerType('text');
   };
 
   // Manejador para activar/desactivar una encuesta
@@ -468,11 +503,11 @@ export const AdminDashboard: React.FC = () => {
         .update({ active: nextState })
         .eq('id', id);
       if (error) throw error;
-      setSuccessMsg(`Encuesta "${surveyToToggle.question}" ${nextState ? 'activada para pasajeros' : 'desactivada'}.`);
+      setSuccessMsg(`Encuesta "${surveyToToggle.title}" ${nextState ? 'activada para pasajeros' : 'desactivada'}.`);
     } catch (dbErr) {
       console.warn('Error al activar encuesta en Supabase:', dbErr);
       localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedSurveys));
-      setSuccessMsg(`[Modo Offline] Encuesta "${surveyToToggle.question}" ${nextState ? 'activada' : 'desactivada'} en caché local.`);
+      setSuccessMsg(`[Modo Offline] Encuesta "${surveyToToggle.title}" ${nextState ? 'activada' : 'desactivada'} en caché local.`);
     }
   };
 
@@ -502,22 +537,11 @@ export const AdminDashboard: React.FC = () => {
     const surveyToVote = surveys.find(s => s.id === surveyId);
     if (!surveyToVote) return;
     
-    const optionText = surveyToVote.options[optionIndex].text;
+    const optionText = 'Simulado';
 
-    // 1. Guardar localmente
-    const updatedOptions = [...surveyToVote.options];
-    updatedOptions[optionIndex] = {
-      ...updatedOptions[optionIndex],
-      votes: updatedOptions[optionIndex].votes + 1
-    };
-
-    const updatedSurveys = surveys.map(s => s.id === surveyId ? { ...s, options: updatedOptions } : s);
-    setSurveys(updatedSurveys);
-
-    // 2. Registrar evento de analíticas
+    // Registrar evento de analíticas
     const matchedSchool = schools[0] || { id: 'mock-school-1', destination: 'Villa Carlos Paz' };
     getAnalyticsEvents().then(events => {
-      // Registrar evento localmente
       const timestamp = new Date().toISOString();
       const localEvent = {
         id: `local-ev-${Date.now()}`,
@@ -526,7 +550,13 @@ export const AdminDashboard: React.FC = () => {
         destination: matchedSchool.destination,
         metadata: {
           survey_id: surveyId,
-          option: optionText
+          option: optionText,
+          name: 'Pasajero Simulado',
+          email: 'simulado@supertour.com',
+          phone: '11 2233 4455',
+          answer: 'Respuesta simulada',
+          question: surveyToVote.question,
+          answer_type: surveyToVote.answer_type
         },
         created_at: timestamp
       };
@@ -536,17 +566,27 @@ export const AdminDashboard: React.FC = () => {
       localStorage.setItem('supertour_analytics_events', JSON.stringify(list));
       setAnalyticsEvents(prev => [...prev, localEvent]);
     });
+  };
 
-    // 3. Persistir en Supabase o en cache local
+  // Manejador para guardar webhook de CRM
+  const handleSaveWebhook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingWebhook(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
     try {
       const { error } = await supabase
-        .from('surveys')
-        .update({ options: updatedOptions })
-        .eq('id', surveyId);
+        .from('supertour_settings')
+        .upsert({ key: 'n8n_webhook_url', value: webhookUrl });
       if (error) throw error;
-    } catch (dbErr) {
-      console.warn('Error al simular voto en Supabase:', dbErr);
-      localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedSurveys));
+      setSuccessMsg('Webhook de n8n guardado y configurado en Supabase con éxito.');
+    } catch (err: any) {
+      console.warn('Error al guardar el webhook en Supabase:', err);
+      // Guardar localmente
+      localStorage.setItem('supertour_webhook_url', webhookUrl);
+      setSuccessMsg('[Modo Offline] Webhook configurado en caché de este navegador.');
+    } finally {
+      setSavingWebhook(false);
     }
   };
 
@@ -1301,8 +1341,8 @@ export const AdminDashboard: React.FC = () => {
               </div>
             )}
 
-            {/* TAB CONTENT B: SISTEMA DE ENCUESTAS */}
-            {activeTab === 'encuestas' && (
+                {/* TAB CONTENT B: SISTEMA DE ENCUESTAS */}
+                {activeTab === 'encuestas' && (
               <div className="space-y-6">
                 
                 {/* Cabecera Sección Encuestas */}
@@ -1310,112 +1350,252 @@ export const AdminDashboard: React.FC = () => {
                   <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent pointer-events-none" />
                   
                   <div className="z-10">
-                    <span className="text-[9px] font-black text-primary uppercase tracking-widest block mb-1">Módulo de Participación</span>
-                    <h2 className="text-xl sm:text-2xl font-black uppercase text-white tracking-tight leading-none">Creador y Gestor de Encuestas</h2>
-                    <p className="text-[10px] text-zinc-500 uppercase mt-2 font-bold tracking-wider">Armá encuestas dinámicas en tiempo real para que los egresados voten desde la app.</p>
+                    <span className="text-[9px] font-black text-primary uppercase tracking-widest block mb-1">Módulo de CRM & Leads</span>
+                    <h2 className="text-xl sm:text-2xl font-black uppercase text-white tracking-tight leading-none">Creador Avanzado & Inbox de Respuestas</h2>
+                    <p className="text-[10px] text-zinc-500 uppercase mt-2 font-bold tracking-wider">Armá encuestas dinámicas, conectá tu CRM mediante webhooks y visualizá opiniones en tiempo real.</p>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSurveyQuestion('');
-                      setSurveyOptions(['', '', '', '']);
-                      setShowSurveyModal(true);
-                    }}
-                    className="flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-colors glow-yellow self-start sm:self-center z-10"
-                  >
-                    <Plus size={16} />
-                    Crear Encuesta
-                  </button>
                 </div>
 
-                {/* Listado de Encuestas */}
-                <div className="grid md:grid-cols-2 gap-6">
-                  {surveys.length === 0 ? (
-                    <div className="col-span-2 text-center py-20 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-600">
-                      <Sparkles size={28} className="mx-auto text-zinc-800 mb-2 animate-bounce" />
-                      <p className="text-xs font-bold uppercase tracking-wider">No hay encuestas creadas en este momento</p>
-                      <p className="text-[10px] uppercase mt-1">Hacé clic en "Crear Encuesta" en el panel de arriba para iniciar.</p>
+                {/* CRM CONNECT CARD */}
+                <div className="bg-zinc-950/80 border border-zinc-850 p-5 rounded-2xl relative overflow-hidden group shadow-lg">
+                  <div className="absolute top-0 right-0 h-24 w-24 bg-primary/5 blur-xl pointer-events-none" />
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-black text-primary uppercase tracking-widest block leading-none">CRM & Automatizaciones</span>
+                      <h3 className="text-sm font-black uppercase text-white tracking-tight leading-none">Conexión de Webhook (n8n)</h3>
+                      <p className="text-[10px] text-zinc-500 uppercase leading-relaxed font-semibold">
+                        Configurá tu endpoint para disparar un webhook en segundo plano con los datos del lead y sus respuestas al instante.
+                      </p>
                     </div>
-                  ) : (
-                    surveys.map((survey) => {
-                      const totalVotes = survey.options.reduce((sum: number, o: any) => sum + o.votes, 0);
-                      
-                      return (
-                        <div key={survey.id} className={`p-5 rounded-2xl border bg-zinc-950 flex flex-col justify-between transition-all duration-300 relative overflow-hidden group ${
-                          survey.active 
-                            ? 'border-primary shadow-[0_0_20px_rgba(250,204,21,0.06)]' 
-                            : 'border-zinc-850 hover:border-zinc-700'
-                        }`}>
-                          {/* Active state indicator badge */}
-                          <div className="flex justify-between items-start mb-4 z-10">
-                            <span className={`text-[8px] font-black uppercase px-2.5 py-1 rounded-full border ${
-                              survey.active 
-                                ? 'bg-primary/20 border-primary/40 text-primary glow-yellow'
-                                : 'bg-zinc-900 border-zinc-800 text-zinc-500'
-                            }`}>
-                              {survey.active ? 'Encuesta Activa' : 'Borrador / Inactiva'}
-                            </span>
+                    
+                    <form onSubmit={handleSaveWebhook} className="flex flex-1 max-w-md items-center gap-2">
+                      <input
+                        type="url"
+                        value={webhookUrl}
+                        onChange={(e) => setWebhookUrl(e.target.value)}
+                        placeholder="https://n8n.tu-servidor.com/webhook/..."
+                        className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-[10px] font-semibold focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        disabled={savingWebhook}
+                        className="px-4 py-2 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-[10px] uppercase tracking-wider transition-colors glow-yellow disabled:opacity-40 flex-shrink-0"
+                      >
+                        {savingWebhook ? 'Guardando...' : 'Guardar'}
+                      </button>
+                    </form>
+                  </div>
+                </div>
 
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleToggleSurveyActive(survey.id)}
-                                className={`px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all ${
-                                  survey.active 
-                                    ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-red-400' 
-                                    : 'bg-primary text-black border-primary font-black hover:bg-primary/90 glow-yellow'
-                                }`}
-                              >
-                                {survey.active ? 'Desactivar' : 'Activar en Sitio'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteSurvey(survey.id, survey.question)}
-                                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-900/60 text-zinc-500 hover:text-red-400 transition-colors"
-                              >
-                                <Trash2 size={12} />
-                              </button>
+                <div className="grid lg:grid-cols-12 gap-8 items-start">
+                  
+                  {/* LEFT COLUMN: LISTADO DE ENCUESTAS */}
+                  <div className="lg:col-span-6 space-y-6">
+                    <div className="flex justify-between items-center pb-3 border-b border-zinc-900">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5 leading-none">
+                        <Sparkles size={14} className="text-primary" />
+                        Encuestas Creadas ({surveys.length})
+                      </h3>
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSurveyTitle('');
+                          setSurveyDescription('');
+                          setSurveyQuestion('');
+                          setSurveyAnswerType('text');
+                          setSurveyOptions(['', '', '', '']);
+                          setShowSurveyModal(true);
+                        }}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/95 text-black font-black text-[10px] uppercase tracking-wider transition-colors glow-yellow"
+                      >
+                        <Plus size={12} />
+                        Crear Encuesta
+                      </button>
+                    </div>
+
+                    {surveys.length === 0 ? (
+                      <div className="text-center py-20 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-600">
+                        <Sparkles size={24} className="mx-auto text-zinc-800 mb-2 animate-bounce" />
+                        <p className="text-[10px] font-bold uppercase tracking-wider">No hay encuestas creadas en este momento</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1 scrollbar-thin">
+                        {surveys.map((survey) => (
+                          <div key={survey.id} className={`p-4 rounded-xl border bg-zinc-950 flex flex-col justify-between transition-all duration-300 relative overflow-hidden group ${
+                            survey.active 
+                              ? 'border-primary shadow-[0_0_20px_rgba(250,204,21,0.04)]' 
+                              : 'border-zinc-850 hover:border-zinc-800'
+                          }`}>
+                            <div className="flex justify-between items-start mb-2 z-10">
+                              <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                                survey.active 
+                                  ? 'bg-primary/20 border-primary/40 text-primary glow-yellow'
+                                  : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                              }`}>
+                                {survey.active ? 'Encuesta Activa' : 'Borrador / Inactiva'}
+                              </span>
+
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleSurveyActive(survey.id)}
+                                  className={`px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all ${
+                                    survey.active 
+                                      ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-red-400' 
+                                      : 'bg-primary text-black border-primary font-black hover:bg-primary/90 glow-yellow'
+                                  }`}
+                                >
+                                  {survey.active ? 'Desactivar' : 'Activar'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSurvey(survey.id, survey.question)}
+                                  className="p-1 rounded-lg bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-900/60 text-zinc-500 hover:text-red-400 transition-colors"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              </div>
+                            </div>
+
+                            <h4 className="text-xs font-black uppercase text-white tracking-tight leading-snug">{survey.title}</h4>
+                            <p className="text-[9px] text-zinc-500 uppercase font-semibold leading-normal tracking-wide mt-1">{survey.description}</p>
+
+                            <div className="p-2.5 rounded-lg bg-zinc-900 border border-zinc-850 mt-3.5 space-y-1">
+                              <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none">Pregunta Formulada</span>
+                              <span className="block text-[10px] font-black uppercase text-zinc-300 leading-normal">{survey.question}</span>
+                              <span className="inline-block mt-1 text-[8px] font-black text-primary uppercase tracking-widest px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+                                Tipo: {survey.answer_type === 'text' ? 'Texto Libre' : survey.answer_type === 'number' ? 'Numérica (1-10)' : 'Verdadero / Falso'}
+                              </span>
+                            </div>
+
+                            {/* WhatsApp link picker */}
+                            <div className="mt-3.5 pt-3 border-t border-zinc-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                              <span className="font-bold text-zinc-500 uppercase tracking-wider text-[9px]">WhatsApp / Link:</span>
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  id={`school-link-select-${survey.id}`}
+                                  className="bg-zinc-900 border border-zinc-800 rounded-lg text-[9px] font-black uppercase text-zinc-300 px-2 py-1 focus:outline-none"
+                                >
+                                  <option value="">Enlace General (Sin Colegio)</option>
+                                  {schools.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const sel = document.getElementById(`school-link-select-${survey.id}`) as HTMLSelectElement;
+                                    const sid = sel ? sel.value : '';
+                                    const baseUrl = window.location.origin;
+                                    const link = sid ? `${baseUrl}/encuesta/${survey.id}?schoolId=${sid}` : `${baseUrl}/encuesta/${survey.id}`;
+                                    navigator.clipboard.writeText(link);
+                                    alert('¡Enlace de WhatsApp copiado con éxito!');
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-primary hover:bg-primary/95 text-black font-black text-[9px] uppercase tracking-wider transition-colors glow-yellow"
+                                >
+                                  Copiar
+                                </button>
+                              </div>
                             </div>
                           </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
-                          {/* Question */}
-                          <h3 className="text-sm font-black uppercase tracking-tight text-white mb-5 z-10 leading-snug">
-                            {survey.question}
-                          </h3>
+                  {/* RIGHT COLUMN: INBOX EN VIVO DE RESPUESTAS (CRM INBOX) */}
+                  <div className="lg:col-span-6 space-y-6">
+                    <div className="flex justify-between items-center pb-3 border-b border-zinc-900">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5 leading-none">
+                        <Database size={14} className="text-primary animate-pulse" />
+                        Bandeja de Entrada: Respuestas de Pasajeros
+                      </h3>
+                      <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-zinc-500 tracking-widest">
+                        Total: {analyticsEvents.filter(e => e.event_type === 'survey_vote').length} leads
+                      </span>
+                    </div>
 
-                          {/* Options / Progress bars */}
-                          <div className="space-y-3 z-10">
-                            {survey.options.map((option: any, optIdx: number) => {
-                              const percentage = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
-                              return (
-                                <div key={optIdx} className="space-y-1 group/opt cursor-pointer" onClick={() => handleSimulateVote(survey.id, optIdx)} title="Hacé clic para simular un voto">
-                                  <div className="flex justify-between items-center text-[10px] font-semibold text-zinc-400 group-hover/opt:text-white transition-colors">
-                                    <span className="truncate max-w-[80%] font-bold">{option.text}</span>
-                                    <span className="font-mono text-zinc-300 font-bold">{option.votes} votos ({percentage}%)</span>
+                    {analyticsEvents.filter(e => e.event_type === 'survey_vote').length === 0 ? (
+                      <div className="text-center py-20 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-600">
+                        <ImageIcon size={24} className="mx-auto text-zinc-800 mb-2" />
+                        <p className="text-[10px] font-bold uppercase tracking-wider">No se han recibido respuestas aún</p>
+                        <p className="text-[8px] uppercase mt-1">Comparte un enlace de encuesta con tus pasajeros para recopilar leads.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1 scrollbar-thin">
+                        {analyticsEvents
+                          .filter(e => e.event_type === 'survey_vote')
+                          .map((e, idx) => {
+                            const name = e.metadata?.name || 'Pasajero Anónimo';
+                            const email = e.metadata?.email || 'No provisto';
+                            const phone = e.metadata?.phone || 'No provisto';
+                            const answer = e.metadata?.answer || '';
+                            const qText = e.metadata?.question || 'Pregunta general';
+                            const aType = e.metadata?.answer_type || 'text';
+                            
+                            const matchedSch = schools.find(s => s.id === e.school_id);
+                            const schName = matchedSch ? matchedSch.name : 'General / Sin Colegio';
+                            const timestamp = e.created_at ? new Date(e.created_at).toLocaleString('es-AR') : 'Reciente';
+
+                            return (
+                              <div key={e.id || idx} className="p-4 rounded-xl border border-zinc-855 bg-zinc-950/40 hover:border-zinc-700 transition-colors space-y-3 shadow-md relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 h-16 w-16 bg-primary/2 blur-lg pointer-events-none" />
+                                
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-900 pb-2">
+                                  <div>
+                                    <h4 className="text-xs font-black uppercase text-white leading-none">{name}</h4>
+                                    <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[9px] text-zinc-500 font-bold uppercase tracking-wider">
+                                      <span className="flex items-center gap-0.5 text-zinc-400 font-semibold"><Mail size={10} /> {email}</span>
+                                      {phone !== 'No provisto' && (
+                                        <span className="flex items-center gap-0.5 text-zinc-400 font-semibold"><Phone size={10} /> {phone}</span>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className="w-full h-2.5 bg-zinc-900 rounded-full overflow-hidden border border-zinc-850 relative">
-                                    <div 
-                                      className={`h-full rounded-full transition-all duration-700 ${
-                                        survey.active ? 'bg-gradient-to-r from-yellow-500 to-primary glow-yellow' : 'bg-zinc-750'
-                                      }`}
-                                      style={{ width: `${percentage}%` }}
-                                    />
+                                  
+                                  <div className="text-right">
+                                    <span className="inline-block px-2 py-0.5 bg-zinc-900 border border-zinc-800 text-[8px] font-black uppercase text-zinc-400 rounded-md leading-none">{schName}</span>
+                                    <span className="block text-[7px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{timestamp}</span>
                                   </div>
                                 </div>
-                              );
-                            })}
-                          </div>
 
-                          {/* Footer Info */}
-                          <div className="mt-6 pt-4 border-t border-zinc-900 flex justify-between items-center text-[8px] text-zinc-500 font-bold uppercase tracking-wider">
-                            <span>Votos Totales: {totalVotes}</span>
-                            <span>Creado el {survey.created_at}</span>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
+                                <div className="space-y-1.5">
+                                  <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none">Pregunta Respondida: "{qText}"</span>
+                                  
+                                  {aType === 'text' && (
+                                    <p className="text-[10px] text-zinc-300 italic font-semibold leading-relaxed border-l-2 border-primary/40 pl-2 bg-zinc-900/30 py-1.5 rounded-r-lg uppercase">
+                                      "{answer}"
+                                    </p>
+                                  )}
+
+                                  {aType === 'number' && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-primary text-black font-black text-xs glow-yellow">
+                                        {answer}
+                                      </span>
+                                      <span className="text-[9px] font-black uppercase text-zinc-400 font-bold">Puntuación otorgada</span>
+                                    </div>
+                                  )}
+
+                                  {aType === 'boolean' && (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`inline-block px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+                                        answer === 'Verdadero' 
+                                          ? 'bg-emerald-950/60 border border-emerald-900/60 text-emerald-400 font-bold' 
+                                          : 'bg-red-950/60 border border-red-900/60 text-red-400 font-bold'
+                                      }`}>
+                                        {answer}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+
                 </div>
 
               </div>
@@ -1863,7 +2043,7 @@ export const AdminDashboard: React.FC = () => {
                   Nueva Encuesta Estudiantil
                 </h3>
                 <p className="text-[10px] text-zinc-500 uppercase mt-1 leading-none">
-                  Definí una pregunta y múltiples opciones para tus pasajeros
+                  Generá un cuestionario con formato de Texto, Escala del 1 al 10 o Verdadero/Falso.
                 </p>
               </div>
               <button 
@@ -1879,40 +2059,59 @@ export const AdminDashboard: React.FC = () => {
               
               <div>
                 <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
-                  Pregunta de la Encuesta
+                  Título de la Encuesta
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={surveyTitle}
+                  onChange={(e) => setSurveyTitle(e.target.value)}
+                  placeholder="Tu opinión sobre el viaje / Puntuación Coordinador"
+                  className="w-full px-3.5 py-3 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
+                  Descripción / Copia explicativa
+                </label>
+                <textarea
+                  required
+                  value={surveyDescription}
+                  onChange={(e) => setSurveyDescription(e.target.value)}
+                  placeholder="Queremos saber qué tal te pareció..."
+                  rows={2}
+                  className="w-full p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
+                  Pregunta Central
                 </label>
                 <input
                   type="text"
                   required
                   value={surveyQuestion}
                   onChange={(e) => setSurveyQuestion(e.target.value)}
-                  placeholder="¿Cuál fue el mejor boliche de tu viaje?"
+                  placeholder="¿Qué nota le ponés al coordinador?"
                   className="w-full px-3.5 py-3 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none"
                 />
               </div>
 
-              <div className="space-y-3">
-                <span className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest leading-none">Opciones de Respuesta</span>
-                
-                {surveyOptions.map((option, idx) => (
-                  <div key={idx}>
-                    <label className="block text-[8px] font-bold text-zinc-500 uppercase tracking-wider mb-1">
-                      Opción #{idx + 1} {idx < 2 && '(Obligatoria)'}
-                    </label>
-                    <input
-                      type="text"
-                      required={idx < 2}
-                      value={option}
-                      onChange={(e) => {
-                        const copy = [...surveyOptions];
-                        copy[idx] = e.target.value;
-                        setSurveyOptions(copy);
-                      }}
-                      placeholder={`Ej. Opción de respuesta ${idx + 1}`}
-                      className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-[11px] font-semibold focus:outline-none"
-                    />
-                  </div>
-                ))}
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
+                  Tipo de Respuesta Admitido
+                </label>
+                <select
+                  value={surveyAnswerType}
+                  onChange={(e) => setSurveyAnswerType(e.target.value as any)}
+                  className="w-full px-3.5 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs font-bold focus:outline-none focus:border-primary"
+                >
+                  <option value="text">Texto Libre (Comentarios y sugerencias)</option>
+                  <option value="number">Numérica del 1 al 10 (Calificaciones)</option>
+                  <option value="boolean">Verdadero o Falso (Conformidad Sí/No)</option>
+                </select>
               </div>
 
               {/* Botones de acción modal */}
