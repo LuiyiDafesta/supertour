@@ -183,11 +183,11 @@ export const SchoolDetailPage: React.FC = () => {
           .from('surveys')
           .select('*')
           .eq('active', true)
-          .maybeSingle();
+          .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        let survey = data;
+        let survey = data && data.length > 0 ? data[0] : null;
         if (!survey) {
           // Fallback to local storage or mock survey
           const localSurveysRaw = localStorage.getItem('supertour_local_surveys');

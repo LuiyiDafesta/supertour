@@ -81,31 +81,48 @@ export const SurveyPage: React.FC = () => {
         }
       } catch (err) {
         console.warn('Error loading survey from DB, fallback to local/mock database:', err);
-        // Fallback robust offline with multiple questions
-        const mockSurveys = [
-          {
-            id: 'survey-1',
-            title: 'Encuesta Final de Viaje',
-            description: 'Queremos saber tu opinión detallada sobre los distintos aspectos de tu viaje de egresados.',
-            questions: [
-              { id: 'q-1', question: '¿Cómo calificarías el desempeño general de tu coordinador?', answer_type: 'number' },
-              { id: 'q-2', question: 'Dejanos tus comentarios sobre lo que más te gustó y qué mejorarías:', answer_type: 'text' },
-              { id: 'q-3', question: '¿SuperTourChannel cumplió tus expectativas de viaje?', answer_type: 'boolean' }
-            ],
-            active: true
-          },
-          {
-            id: 'survey-2',
-            title: 'Calificación de Coordinadores',
-            description: 'Calificá el desempeño general de tu coordinador asignado durante toda la estadía.',
-            questions: [
-              { id: 'q-1', question: '¿Qué nota le ponés al servicio y acompañamiento del coordinador?', answer_type: 'number' }
-            ],
-            active: false
-          }
-        ];
         
-        const matched = mockSurveys.find(s => s.id === surveyId) || mockSurveys[0];
+        // 1. Intentar cargar desde el almacenamiento local de encuestas creadas
+        let matched: any = null;
+        try {
+          const localSurveysRaw = localStorage.getItem('supertour_local_surveys');
+          if (localSurveysRaw) {
+            const localSurveys = JSON.parse(localSurveysRaw);
+            if (Array.isArray(localSurveys)) {
+              matched = localSurveys.find((s: any) => s.id === surveyId);
+            }
+          }
+        } catch (localErr) {
+          console.warn('Error al leer encuestas locales en localStorage:', localErr);
+        }
+
+        // 2. Si no se encuentra, usar el listado de fallbacks mock cableados
+        if (!matched) {
+          const mockSurveys = [
+            {
+              id: 'survey-1',
+              title: 'Encuesta Final de Viaje',
+              description: 'Queremos saber tu opinión detallada sobre los distintos aspectos de tu viaje de egresados.',
+              questions: [
+                { id: 'q-1', question: '¿Cómo calificarías el desempeño general de tu coordinador?', answer_type: 'number' },
+                { id: 'q-2', question: 'Dejanos tus comentarios sobre lo que más te gustó y qué mejorarías:', answer_type: 'text' },
+                { id: 'q-3', question: '¿SuperTourChannel cumplió tus expectativas de viaje?', answer_type: 'boolean' }
+              ],
+              active: true
+            },
+            {
+              id: 'survey-2',
+              title: 'Calificación de Coordinadores',
+              description: 'Calificá el desempeño general de tu coordinador asignado durante toda la estadía.',
+              questions: [
+                { id: 'q-1', question: '¿Qué nota le ponés al servicio y acompañamiento del coordinador?', answer_type: 'number' }
+              ],
+              active: false
+            }
+          ];
+          matched = mockSurveys.find(s => s.id === surveyId) || mockSurveys[0];
+        }
+
         setSurvey(matched);
         
         const alreadyVoted = localStorage.getItem(`supertour_voted_survey_${matched.id}`);

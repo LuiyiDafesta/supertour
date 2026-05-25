@@ -251,6 +251,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Load webhook setting
   const loadWebhookSetting = async () => {
+    let loadedUrl = '';
     try {
       const { data, error } = await supabase
         .from('supertour_settings')
@@ -258,11 +259,17 @@ export const AdminDashboard: React.FC = () => {
         .eq('key', 'n8n_webhook_url')
         .maybeSingle();
       if (!error && data) {
-        setWebhookUrl(data.value);
+        loadedUrl = data.value;
       }
     } catch (err) {
       console.warn('Error loading webhook url setting from DB.');
     }
+
+    if (!loadedUrl) {
+      loadedUrl = localStorage.getItem('supertour_webhook_url') || '';
+    }
+    
+    setWebhookUrl(loadedUrl);
   };
 
   useEffect(() => {
@@ -549,15 +556,11 @@ export const AdminDashboard: React.FC = () => {
       if (s.id === id) {
         return { ...s, active: nextState };
       }
-      return nextState ? { ...s, active: false } : s;
+      return s;
     });
     setSurveys(updatedSurveys);
 
     try {
-      if (nextState) {
-        // Desactivar las demás en DB
-        await supabase.from('surveys').update({ active: false }).neq('id', id);
-      }
       const { error } = await supabase
         .from('surveys')
         .update({ active: nextState })
@@ -634,6 +637,10 @@ export const AdminDashboard: React.FC = () => {
     setSavingWebhook(true);
     setErrorMsg(null);
     setSuccessMsg(null);
+    
+    // Guardar siempre localmente primero para asegurar persistencia
+    localStorage.setItem('supertour_webhook_url', webhookUrl);
+    
     try {
       const { error } = await supabase
         .from('supertour_settings')
@@ -642,8 +649,6 @@ export const AdminDashboard: React.FC = () => {
       setSuccessMsg('Webhook de n8n guardado y configurado en Supabase con éxito.');
     } catch (err: any) {
       console.warn('Error al guardar el webhook en Supabase:', err);
-      // Guardar localmente
-      localStorage.setItem('supertour_webhook_url', webhookUrl);
       setSuccessMsg('[Modo Offline] Webhook configurado en caché de este navegador.');
     } finally {
       setSavingWebhook(false);
