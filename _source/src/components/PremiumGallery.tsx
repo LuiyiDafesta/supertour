@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { GalleryPhoto } from '../types/database';
+import { downloadFileDirectly } from '../lib/downloader';
 import { 
   Download, 
   Share2, 
@@ -197,17 +198,16 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
                     Foto {index + 1}
                   </span>
                   <div className="flex gap-2">
-                    <a
-                      href={photo.url_hd}
-                      download={`SuperTour-${schoolName}-${index + 1}.jpg`}
-                      onClick={(e) => e.stopPropagation()}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        downloadFileDirectly(photo.url_hd, `SuperTour-${schoolName}-${index + 1}.jpg`);
+                      }}
                       className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/95 text-black text-[10px] font-black uppercase tracking-wider transition-all shadow-[0_0_12px_rgba(250,204,21,0.2)]"
                     >
                       <Download size={10} />
                       Descargar HD
-                    </a>
+                    </button>
                     <div className="p-2 rounded-lg bg-zinc-900/60 hover:bg-zinc-900 text-white border border-zinc-800 transition-colors">
                       <Maximize2 size={12} />
                     </div>
@@ -280,16 +280,16 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
             <div className="w-[1px] h-5 bg-zinc-800" />
 
             {/* Download HD trigger */}
-            <a
-              href={photos[lightboxIndex].url_hd}
-              download={`SuperTour-${schoolName}-${lightboxIndex + 1}.jpg`}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                downloadFileDirectly(photos[lightboxIndex].url_hd, `SuperTour-${schoolName}-${lightboxIndex + 1}.jpg`);
+              }}
               className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-primary hover:bg-primary/95 text-black text-xs font-black uppercase tracking-wider transition-all glow-yellow"
             >
               <Download size={12} />
               Descargar HD
-            </a>
+            </button>
           </div>
 
           {/* Navigation Arrows */}

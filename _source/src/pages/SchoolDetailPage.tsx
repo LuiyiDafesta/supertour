@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { School, GalleryPhoto } from '../types/database';
+import { downloadFileDirectly } from '../lib/downloader';
 import { Navbar } from '../components/Navbar';
 import { PremiumGallery } from '../components/PremiumGallery';
 import { ArrowLeft, Download, Film, Users, Image as ImageIcon, MapPin, Calendar, Share2, Sparkles } from 'lucide-react';
@@ -262,16 +263,13 @@ export const SchoolDetailPage: React.FC = () => {
                 Descargar Video del Viaje
               </a>
               
-              <a
-                href={school.group_photo_hd}
-                download={`SuperTour-${school.name}-FotoGrupal.jpg`}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                onClick={() => downloadFileDirectly(school.group_photo_hd, `SuperTour-${school.name}-FotoGrupal.jpg`)}
                 className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-all duration-300 w-full sm:w-auto glow-yellow"
               >
                 <Download size={16} />
                 Descargar Foto Grupal HD
-              </a>
+              </button>
             </div>
           </div>
         </div>
@@ -299,16 +297,13 @@ export const SchoolDetailPage: React.FC = () => {
                 <span className="text-xs font-bold text-zinc-300 uppercase tracking-widest">
                   Viaje a {school.destination} • {formatDate(school.travel_date)}
                 </span>
-                <a
-                  href={school.group_photo_hd}
-                  download={`SuperTour-${school.name}-Grupal.jpg`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => downloadFileDirectly(school.group_photo_hd, `SuperTour-${school.name}-Grupal.jpg`)}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-black text-xs font-black uppercase tracking-wider transition-transform scale-95 group-hover:scale-100 duration-300"
                 >
                   <Download size={12} />
                   Descargar HD
-                </a>
+                </button>
               </div>
             </div>
           </div>
