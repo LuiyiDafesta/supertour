@@ -85,15 +85,37 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
 
         if (error) throw error;
 
+        let loadedSchools: School[] = [];
         if (data && data.length > 0) {
-          setSchools(data as School[]);
+          loadedSchools = data as School[];
         } else {
           // Fallback to mock data matching selected destination
-          setSchools(mockSchools.filter((s) => s.destination === destination));
+          loadedSchools = mockSchools.filter((s) => s.destination === destination);
+        }
+        setSchools(loadedSchools);
+
+        // Auto-select the first month that actually has registered schools!
+        const monthsToCheck: (9 | 10 | 11)[] = [9, 10, 11];
+        const monthsWithSchools = monthsToCheck.filter((m) => {
+          const monthStr = monthData[m].monthStr;
+          return loadedSchools.some((s) => {
+            if (!s.travel_date) return false;
+            const schoolDateOnly = s.travel_date.split(' ')[0].split('T')[0];
+            return schoolDateOnly.startsWith(`2026-${monthStr}-`);
+          });
+        });
+
+        if (monthsWithSchools.length > 0) {
+          // If the default month (10 / Noviembre) has schools, keep it.
+          // Otherwise, select the first month that has schools.
+          if (!monthsWithSchools.includes(10)) {
+            setSelectedMonth(monthsWithSchools[0]);
+          }
         }
       } catch (err) {
         console.warn('Database connection failed, using mock school data.');
-        setSchools(mockSchools.filter((s) => s.destination === destination));
+        const loadedSchools = mockSchools.filter((s) => s.destination === destination);
+        setSchools(loadedSchools);
       } finally {
         setLoading(false);
       }
@@ -116,12 +138,16 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
   const currentMonth = monthData[selectedMonth];
   const daysOfWeek = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
 
-  // Check if a specific day has schools loaded
+  // Check if a specific day has schools loaded (robustly extract date-only)
   const getSchoolsForDay = (day: number) => {
     const monthStr = currentMonth.monthStr;
     const dayStr = day < 10 ? `0${day}` : `${day}`;
     const dateQuery = `${currentMonth.year}-${monthStr}-${dayStr}`;
-    return schools.filter((school) => school.travel_date === dateQuery);
+    return schools.filter((school) => {
+      if (!school.travel_date) return false;
+      const schoolDateOnly = school.travel_date.split(' ')[0].split('T')[0];
+      return schoolDateOnly === dateQuery;
+    });
   };
 
   // Check if a day has active trips to highlight
@@ -132,9 +158,11 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
   // Helper to count schools in a specific month
   const getSchoolCountForMonth = (m: 9 | 10 | 11) => {
     const monthStr = monthData[m].monthStr;
-    return schools.filter(
-      (s) => s.travel_date && s.travel_date.startsWith(`2026-${monthStr}-`)
-    ).length;
+    return schools.filter((s) => {
+      if (!s.travel_date) return false;
+      const schoolDateOnly = s.travel_date.split(' ')[0].split('T')[0];
+      return schoolDateOnly.startsWith(`2026-${monthStr}-`);
+    }).length;
   };
 
   const activeDaySchools = selectedDay ? getSchoolsForDay(selectedDay) : [];
