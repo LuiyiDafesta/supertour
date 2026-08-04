@@ -25,7 +25,7 @@ export const LandingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white relative">
+    <div className="min-h-screen bg-black text-white relative overflow-x-hidden w-full">
       {/* Dynamic sticky header */}
       <Navbar />
 

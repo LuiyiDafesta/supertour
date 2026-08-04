@@ -180,13 +180,7 @@ export const Navbar: React.FC = () => {
               Nosotros
             </a>
 
-            <a
-              href="#contacto"
-              onClick={triggerContactModal}
-              className="text-sm font-black tracking-wide uppercase px-3 pt-1 pb-2 border-b-2 border-transparent text-zinc-300 hover:text-white hover:border-zinc-700/50 transition-all duration-200"
-            >
-              Contacto
-            </a>
+
 
             {isAdmin ? (
               <>
@@ -308,16 +302,7 @@ export const Navbar: React.FC = () => {
             Nosotros
           </a>
 
-          <a
-            href="#contacto"
-            onClick={(e) => {
-              setIsOpen(false);
-              triggerContactModal(e);
-            }}
-            className="block px-4 py-3 rounded-xl text-base font-black tracking-wide uppercase text-zinc-300 hover:text-white hover:bg-zinc-900/40 border border-transparent transition-all active:scale-98"
-          >
-            Contacto
-          </a>
+
         </div>
       </div>
     </nav>

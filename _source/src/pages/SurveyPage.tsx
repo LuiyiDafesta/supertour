@@ -325,7 +325,7 @@ export const SurveyPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white relative flex flex-col justify-between">
+    <div className="min-h-screen bg-black text-white relative flex flex-col justify-between overflow-x-hidden w-full">
       
       {/* Luces doradas decorativas */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[500px] bg-gradient-to-b from-primary/5 via-transparent to-transparent blur-[120px] pointer-events-none z-0" />

@@ -122,7 +122,9 @@ export const AdminDashboard: React.FC = () => {
   // Sales Banner & Custom Script states
   const [showSalesBanner, setShowSalesBanner] = useState(false);
   const [visitorTrackingScript, setVisitorTrackingScript] = useState('');
+  const [anychatScript, setAnychatScript] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
+  const [savingAnychat, setSavingAnychat] = useState(false);
   const [selectedSubSchool, setSelectedSubSchool] = useState('General');
 
   // Live Telemetry states
@@ -265,11 +267,12 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Load settings (Webhook, Banner, visitor tracking script)
+  // Load settings (Webhook, Banner, visitor tracking script, anychat script)
   const loadSettings = async () => {
     let loadedUrl = '';
     let loadedBanner = false;
     let loadedScript = '';
+    let loadedAnychat = '';
     try {
       const { data: webhookData } = await supabase
         .from('supertour_settings')
@@ -297,6 +300,15 @@ export const AdminDashboard: React.FC = () => {
       if (scriptData) {
         loadedScript = scriptData.value;
       }
+
+      const { data: anychatData } = await supabase
+        .from('supertour_settings')
+        .select('value')
+        .eq('key', 'anychat_script')
+        .maybeSingle();
+      if (anychatData) {
+        loadedAnychat = anychatData.value;
+      }
     } catch (err) {
       console.warn('Error loading settings from DB.');
     }
@@ -307,10 +319,14 @@ export const AdminDashboard: React.FC = () => {
     if (!loadedScript) {
       loadedScript = localStorage.getItem('supertour_visitor_tracking_script') || '';
     }
+    if (!loadedAnychat) {
+      loadedAnychat = localStorage.getItem('supertour_anychat_script') || '';
+    }
     
     setWebhookUrl(loadedUrl);
     setShowSalesBanner(loadedBanner);
     setVisitorTrackingScript(loadedScript);
+    setAnychatScript(loadedAnychat);
   };
 
   useEffect(() => {
@@ -736,6 +752,31 @@ export const AdminDashboard: React.FC = () => {
       toast.error(`Error al guardar en Supabase: ${err.message || 'Error de permisos/red'}`);
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  // Save custom anychat script
+  const handleSaveAnychatScript = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingAnychat(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    localStorage.setItem('supertour_anychat_script', anychatScript);
+
+    try {
+      const { error } = await supabase
+        .from('supertour_settings')
+        .upsert({ key: 'anychat_script', value: anychatScript });
+      if (error) throw error;
+      setSuccessMsg('Script de Anychat guardado y configurado con éxito.');
+      toast.success('Script de Anychat guardado con éxito.');
+    } catch (err: any) {
+      console.warn('Error al guardar el script de Anychat en Supabase:', err);
+      setSuccessMsg('[Modo Offline] Script Anychat guardado localmente.');
+      toast.error(`Error al guardar en Supabase: ${err.message || 'Error de permisos/red'}`);
+    } finally {
+      setSavingAnychat(false);
     }
   };
 
@@ -1826,6 +1867,39 @@ export const AdminDashboard: React.FC = () => {
                           className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-[10px] uppercase tracking-wider transition-colors glow-yellow disabled:opacity-40"
                         >
                           {savingSettings ? 'Guardando Script...' : 'Guardar Script de Tracking'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+                {/* ANYCHAT SCRIPT CARD */}
+                <div className="bg-zinc-950/80 border border-zinc-850 p-5 rounded-2xl relative overflow-hidden group shadow-lg">
+                  <div className="absolute top-0 right-0 h-24 w-24 bg-primary/5 blur-xl pointer-events-none" />
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-black text-primary uppercase tracking-widest block leading-none">Soporte en Vivo</span>
+                      <h3 className="text-sm font-black uppercase text-white tracking-tight leading-none">Script de Anychat</h3>
+                      <p className="text-[10px] text-zinc-500 uppercase leading-relaxed font-semibold">
+                        Pegá tu fragmento de código de Anychat (incluyendo etiquetas &lt;script&gt;) para inyectarlo y activar el chat en la parte pública del sitio.
+                      </p>
+                    </div>
+                    
+                    <form onSubmit={handleSaveAnychatScript} className="space-y-3">
+                      <textarea
+                        rows={4}
+                        value={anychatScript}
+                        onChange={(e) => setAnychatScript(e.target.value)}
+                        placeholder="<!-- Pegá aquí tu código de widget de Anychat -->&#10;<script>...</script>"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white font-mono text-[10px] focus:outline-none"
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          type="submit"
+                          disabled={savingAnychat}
+                          className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-[10px] uppercase tracking-wider transition-colors glow-yellow disabled:opacity-40"
+                        >
+                          {savingAnychat ? 'Guardando Script...' : 'Guardar Script de Anychat'}
                         </button>
                       </div>
                     </form>

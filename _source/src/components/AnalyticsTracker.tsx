@@ -12,10 +12,11 @@ declare global {
 export const AnalyticsTracker: React.FC = () => {
   const location = useLocation();
 
-  // Load and inject custom Visitor Tracking / HTML tracking script on mount
+  // Load and inject custom Tracking and Chat widgets scripts on mount
   useEffect(() => {
     const fetchAndInjectScript = async () => {
       try {
+        // 1. Inject Visitor Tracking
         const { data, error } = await supabase
           .from('supertour_settings')
           .select('value')
@@ -31,7 +32,6 @@ export const AnalyticsTracker: React.FC = () => {
             
             scripts.forEach(script => {
               const newScript = document.createElement('script');
-              // Copy attributes
               Array.from(script.attributes).forEach(attr => {
                 newScript.setAttribute(attr.name, attr.value);
               });
@@ -46,8 +46,39 @@ export const AnalyticsTracker: React.FC = () => {
             });
           }
         }
+
+        // 2. Inject Anychat script
+        const { data: anychatData, error: anychatError } = await supabase
+          .from('supertour_settings')
+          .select('value')
+          .eq('key', 'anychat_script')
+          .maybeSingle();
+
+        if (!anychatError && anychatData && anychatData.value && anychatData.value.trim() !== '') {
+          const existingAnychat = document.getElementById('supertour-anychat');
+          if (!existingAnychat) {
+            const container = document.createElement('div');
+            container.innerHTML = anychatData.value;
+            const scripts = container.querySelectorAll('script');
+            
+            scripts.forEach(script => {
+              const newScript = document.createElement('script');
+              Array.from(script.attributes).forEach(attr => {
+                newScript.setAttribute(attr.name, attr.value);
+              });
+              if (script.src) {
+                newScript.src = script.src;
+                newScript.async = true;
+              } else {
+                newScript.textContent = script.textContent;
+              }
+              newScript.id = 'supertour-anychat';
+              document.body.appendChild(newScript);
+            });
+          }
+        }
       } catch (err) {
-        console.warn('Could not load custom visitor tracking script from Supabase:', err);
+        console.warn('Could not load custom scripts from Supabase:', err);
       }
     };
 
