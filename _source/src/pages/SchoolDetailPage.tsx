@@ -159,8 +159,30 @@ export const SchoolDetailPage: React.FC = () => {
   useEffect(() => {
     const fetchSchoolData = async () => {
       setLoading(true);
+      
+      // 1. Fetch Sales Banner Setting (independent of school data)
+      let bannerVal = false;
       try {
-        // 1. Fetch School metadata
+        const { data: bannerData } = await supabase
+          .from('supertour_settings')
+          .select('value')
+          .eq('key', 'show_sales_banner')
+          .maybeSingle();
+        if (bannerData) {
+          bannerVal = bannerData.value === 'true';
+        }
+      } catch (bannerErr) {
+        console.warn('Could not load show_sales_banner setting from DB:', bannerErr);
+      }
+      
+      // LocalStorage fallback for offline/dev resilience
+      if (localStorage.getItem('supertour_show_sales_banner') === 'true') {
+        bannerVal = true;
+      }
+      setBannerEnabled(bannerVal);
+
+      try {
+        // 2. Fetch School metadata
         const { data: schoolData, error: schoolError } = await supabase
           .from('schools')
           .select('*')
@@ -179,7 +201,7 @@ export const SchoolDetailPage: React.FC = () => {
             destination: schoolData.destination
           });
           
-          // 2. Fetch School Photos
+          // 3. Fetch School Photos
           const { data: photoData, error: photoError } = await supabase
             .from('gallery_photos')
             .select('*')
@@ -193,20 +215,6 @@ export const SchoolDetailPage: React.FC = () => {
           } else {
             // Use mock photos if gallery is empty
             setPhotos(mockPhotos);
-          }
-
-          // 3. Fetch Sales Banner Setting
-          try {
-            const { data: bannerData } = await supabase
-              .from('supertour_settings')
-              .select('value')
-              .eq('key', 'show_sales_banner')
-              .maybeSingle();
-            if (bannerData) {
-              setBannerEnabled(bannerData.value === 'true');
-            }
-          } catch (bannerErr) {
-            console.warn('Could not load show_sales_banner setting:', bannerErr);
           }
         }
       } catch (err) {

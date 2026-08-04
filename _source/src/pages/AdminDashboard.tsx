@@ -700,6 +700,7 @@ export const AdminDashboard: React.FC = () => {
   // Toggle Sales Banner setting
   const handleToggleSalesBanner = async (checked: boolean) => {
     setShowSalesBanner(checked);
+    localStorage.setItem('supertour_show_sales_banner', checked ? 'true' : 'false');
     try {
       const { error } = await supabase
         .from('supertour_settings')
