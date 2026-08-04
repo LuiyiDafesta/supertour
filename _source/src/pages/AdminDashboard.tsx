@@ -778,7 +778,8 @@ export const AdminDashboard: React.FC = () => {
     };
 
     try {
-      if (editingSchool) {
+      const isRealEdit = editingSchool && !editingSchool.id.startsWith('offline-school-');
+      if (isRealEdit) {
         // Actualizar colegio/grupo existente
         const { data, error } = await supabase
           .from('schools')
