@@ -692,6 +692,7 @@ export const AdminDashboard: React.FC = () => {
     } catch (err: any) {
       console.warn('Error al guardar el webhook en Supabase:', err);
       setSuccessMsg('[Modo Offline] Webhook configurado en caché de este navegador.');
+      toast.error(`Error al guardar en Supabase: ${err.message || 'Error desconocido'}`);
     } finally {
       setSavingWebhook(false);
     }
@@ -709,7 +710,7 @@ export const AdminDashboard: React.FC = () => {
       toast.success(checked ? 'Banner de ventas activado con éxito.' : 'Banner de ventas desactivado.');
     } catch (err: any) {
       console.warn('Error al guardar show_sales_banner en Supabase:', err);
-      toast.error('Error al guardar la configuración en Supabase.');
+      toast.error(`Error al guardar en Supabase: ${err.message || 'Error de permisos/red'}`);
     }
   };
 
@@ -732,6 +733,7 @@ export const AdminDashboard: React.FC = () => {
     } catch (err: any) {
       console.warn('Error al guardar el script de tracking en Supabase:', err);
       setSuccessMsg('[Modo Offline] Script configurado en caché de este navegador.');
+      toast.error(`Error al guardar en Supabase: ${err.message || 'Error de permisos/red'}`);
     } finally {
       setSavingSettings(false);
     }
