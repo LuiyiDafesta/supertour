@@ -37,6 +37,12 @@ export const SurveyPage: React.FC = () => {
   useEffect(() => {
     const loadSurveyData = async () => {
       setLoading(true);
+      setVotedToken(false);
+      setSubmitSuccess(false);
+      setAnswers({});
+      setIsSubmitting(false);
+      setSurvey(null);
+      
       try {
         // Validate if surveyId is a valid UUID before querying Supabase to avoid 400 error in console
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(surveyId || '');

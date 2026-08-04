@@ -48,7 +48,9 @@ export const SchoolDetailPage: React.FC = () => {
   const mockSchoolsMap: Record<string, School> = {
     'mock-school-1': {
       id: 'mock-school-1',
-      name: 'EGB Colegio San Martín',
+      group_code: '0001',
+      name: 'EGB Colegio San Martín, Instituto Belgrano',
+      school_names: ['EGB Colegio San Martín', 'Instituto Belgrano'],
       destination: 'Villa Carlos Paz',
       travel_date: '2026-11-10',
       group_photo_web: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&auto=format&fit=crop&q=80',
@@ -57,7 +59,9 @@ export const SchoolDetailPage: React.FC = () => {
     },
     'mock-school-2': {
       id: 'mock-school-2',
+      group_code: '0002',
       name: 'Primaria Instituto Don Bosco',
+      school_names: ['Primaria Instituto Don Bosco'],
       destination: 'Villa Carlos Paz',
       travel_date: '2026-11-22',
       group_photo_web: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&auto=format&fit=crop&q=80',
@@ -66,7 +70,9 @@ export const SchoolDetailPage: React.FC = () => {
     },
     'mock-school-3': {
       id: 'mock-school-3',
-      name: 'Primaria Instituto Dardo Rocha',
+      group_code: '0003',
+      name: 'Primaria Instituto Dardo Rocha, Escuela Nº 5',
+      school_names: ['Primaria Instituto Dardo Rocha', 'Escuela Nº 5'],
       destination: 'Mar del Plata',
       travel_date: '2026-10-12',
       group_photo_web: 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=800&auto=format&fit=crop&q=80',
@@ -75,7 +81,9 @@ export const SchoolDetailPage: React.FC = () => {
     },
     'mock-school-4': {
       id: 'mock-school-4',
+      group_code: '0004',
       name: 'Colegio Stella Maris',
+      school_names: ['Colegio Stella Maris'],
       destination: 'Mar del Plata',
       travel_date: '2026-10-25',
       group_photo_web: 'https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?w=800&auto=format&fit=crop&q=80',
@@ -84,7 +92,9 @@ export const SchoolDetailPage: React.FC = () => {
     },
     'mock-school-5': {
       id: 'mock-school-5',
+      group_code: '0005',
       name: 'Colegio Santa Rosa',
+      school_names: ['Colegio Santa Rosa'],
       destination: 'Villa Carlos Paz',
       travel_date: '2026-12-15',
       group_photo_web: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop&q=80',
@@ -93,7 +103,9 @@ export const SchoolDetailPage: React.FC = () => {
     },
     'mock-school-6': {
       id: 'mock-school-6',
+      group_code: '0006',
       name: 'EGB Instituto Peralta Ramos',
+      school_names: ['EGB Instituto Peralta Ramos'],
       destination: 'Mar del Plata',
       travel_date: '2026-12-08',
       group_photo_web: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&auto=format&fit=crop&q=80',
@@ -426,6 +438,15 @@ export const SchoolDetailPage: React.FC = () => {
               <h1 className="text-3xl sm:text-5xl md:text-6xl font-black uppercase tracking-tight text-white leading-none">
                 {school.name}
               </h1>
+              {school.school_names && school.school_names.length > 1 && (
+                <div className="flex flex-wrap gap-2 mt-3 justify-center md:justify-start">
+                  {school.school_names.map((sName, idx) => (
+                    <span key={idx} className="inline-flex items-center text-xs font-black text-primary bg-zinc-900 border border-zinc-800 px-3 py-1 rounded-lg uppercase">
+                      {sName}
+                    </span>
+                  ))}
+                </div>
+              )}
               
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mt-4 text-sm text-zinc-400 font-medium">
                 <span className="flex items-center gap-1.5 bg-zinc-900/60 px-3 py-1 rounded-lg border border-zinc-800/80">

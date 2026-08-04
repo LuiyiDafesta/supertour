@@ -53,6 +53,8 @@ export const AdminDashboard: React.FC = () => {
   // Form States (Modal)
   const [showSchoolModal, setShowSchoolModal] = useState(false);
   const [editingSchool, setEditingSchool] = useState<School | null>(null); // null significa Crear Nuevo
+  const [groupCode, setGroupCode] = useState('');
+  const [schoolNames, setSchoolNames] = useState<string[]>(['']);
   const [schoolName, setSchoolName] = useState('');
   const [destination, setDestination] = useState<'Mar del Plata' | 'Villa Carlos Paz'>('Mar del Plata');
   const [travelDate, setTravelDate] = useState('2026-10-15');
@@ -128,7 +130,9 @@ export const AdminDashboard: React.FC = () => {
   const mockSchools: School[] = [
     {
       id: 'mock-school-1',
-      name: 'EGB Colegio San Martín',
+      group_code: '0001',
+      name: 'EGB Colegio San Martín, Instituto Belgrano',
+      school_names: ['EGB Colegio San Martín', 'Instituto Belgrano'],
       destination: 'Villa Carlos Paz',
       travel_date: '2026-11-10',
       group_photo_web: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&auto=format&fit=crop&q=80',
@@ -137,7 +141,9 @@ export const AdminDashboard: React.FC = () => {
     },
     {
       id: 'mock-school-2',
+      group_code: '0002',
       name: 'Primaria Instituto Don Bosco',
+      school_names: ['Primaria Instituto Don Bosco'],
       destination: 'Villa Carlos Paz',
       travel_date: '2026-11-22',
       group_photo_web: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&auto=format&fit=crop&q=80',
@@ -146,7 +152,9 @@ export const AdminDashboard: React.FC = () => {
     },
     {
       id: 'mock-school-3',
-      name: 'Primaria Instituto Dardo Rocha',
+      group_code: '0003',
+      name: 'Primaria Instituto Dardo Rocha, Escuela Nº 5',
+      school_names: ['Primaria Instituto Dardo Rocha', 'Escuela Nº 5'],
       destination: 'Mar del Plata',
       travel_date: '2026-10-12',
       group_photo_web: 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=800&auto=format&fit=crop&q=80',
@@ -155,7 +163,9 @@ export const AdminDashboard: React.FC = () => {
     },
     {
       id: 'mock-school-4',
+      group_code: '0004',
       name: 'Colegio Stella Maris',
+      school_names: ['Colegio Stella Maris'],
       destination: 'Mar del Plata',
       travel_date: '2026-10-25',
       group_photo_web: 'https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?w=800&auto=format&fit=crop&q=80',
@@ -653,7 +663,20 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Guardar (Crear o Editar) Colegio
+  // Manejadores para dinámica de colegios integrantes
+  const handleAddSchoolNameField = () => {
+    setSchoolNames(prev => [...prev, '']);
+  };
+
+  const handleUpdateSchoolName = (index: number, val: string) => {
+    setSchoolNames(prev => prev.map((s, i) => i === index ? val : s));
+  };
+
+  const handleRemoveSchoolNameField = (index: number) => {
+    setSchoolNames(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Guardar (Crear o Editar) Grupo de Viaje
   const handleSaveSchool = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -663,8 +686,13 @@ export const AdminDashboard: React.FC = () => {
       ? 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=800'
       : 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800';
 
+    const cleanedSchoolNames = schoolNames.map(s => s.trim()).filter(Boolean);
+    const displayName = cleanedSchoolNames.length > 0 ? cleanedSchoolNames.join(', ') : (schoolName || 'Grupo Sin Nombre');
+
     const schoolData = {
-      name: schoolName,
+      group_code: groupCode.trim(),
+      school_names: cleanedSchoolNames,
+      name: displayName,
       destination,
       travel_date: travelDate,
       group_photo_web: groupWebUrl || defaultPhoto,
@@ -674,7 +702,7 @@ export const AdminDashboard: React.FC = () => {
 
     try {
       if (editingSchool) {
-        // Actualizar colegio existente
+        // Actualizar colegio/grupo existente
         const { data, error } = await supabase
           .from('schools')
           .update(schoolData)
@@ -684,11 +712,11 @@ export const AdminDashboard: React.FC = () => {
 
         if (error) throw error;
 
-        setSuccessMsg(`Colegio "${schoolName}" actualizado con éxito.`);
+        setSuccessMsg(`Grupo "${groupCode || displayName}" actualizado con éxito.`);
         loadSchools();
         closeSchoolModal();
       } else {
-        // Crear nuevo colegio
+        // Crear nuevo grupo
         const { data, error } = await supabase
           .from('schools')
           .insert(schoolData)
@@ -697,7 +725,7 @@ export const AdminDashboard: React.FC = () => {
 
         if (error) throw error;
 
-        setSuccessMsg(`Colegio "${schoolName}" creado con éxito.`);
+        setSuccessMsg(`Grupo "${groupCode || displayName}" creado con éxito.`);
         loadSchools();
         closeSchoolModal();
       }
@@ -705,7 +733,7 @@ export const AdminDashboard: React.FC = () => {
       console.warn('DB insert/update failed, running offline state update.');
       if (editingSchool) {
         setSchools(prev => prev.map(s => s.id === editingSchool.id ? { ...s, ...schoolData } : s));
-        setSuccessMsg(`[Modo Offline] Colegio "${schoolName}" actualizado localmente.`);
+        setSuccessMsg(`[Modo Offline] Grupo "${groupCode || displayName}" actualizado localmente.`);
       } else {
         const offlineId = `offline-school-${Date.now()}`;
         const offlineSchool: School = {
@@ -713,19 +741,18 @@ export const AdminDashboard: React.FC = () => {
           ...schoolData
         };
         setSchools(prev => [offlineSchool, ...prev]);
-        setSuccessMsg(`[Modo Offline] Colegio "${schoolName}" creado localmente.`);
+        setSuccessMsg(`[Modo Offline] Grupo "${groupCode || displayName}" creado localmente.`);
       }
       closeSchoolModal();
     }
   };
 
-  // Eliminar Colegio
+  // Eliminar Colegio / Grupo
   const handleDeleteSchool = async (schoolId: string, name: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm(`¿Estás seguro de eliminar por completo el colegio "${name}" y toda su galería de fotos?\nEsta acción no se puede deshacer.`)) return;
+    if (!window.confirm(`¿Estás seguro de eliminar por completo el grupo "${name}" y toda su galería de fotos?\nEsta acción no se puede deshacer.`)) return;
 
     try {
-      // 1. Eliminar colegio (la cascada SQL borrará las referencias de fotos en la DB automáticamente)
       const { error } = await supabase
         .from('schools')
         .delete()
@@ -735,12 +762,12 @@ export const AdminDashboard: React.FC = () => {
 
       setSchools(prev => prev.filter(s => s.id !== schoolId));
       if (viewingGallerySchool?.id === schoolId) setViewingGallerySchool(null);
-      setSuccessMsg(`Colegio "${name}" y su galería han sido eliminados de la base de datos.`);
+      setSuccessMsg(`Grupo "${name}" y su galería han sido eliminados de la base de datos.`);
     } catch (err) {
       console.warn('DB delete failed, performing offline deletion from local state.');
       setSchools(prev => prev.filter(s => s.id !== schoolId));
       if (viewingGallerySchool?.id === schoolId) setViewingGallerySchool(null);
-      setSuccessMsg(`[Modo Offline] Colegio "${name}" removido de la memoria local.`);
+      setSuccessMsg(`[Modo Offline] Grupo "${name}" removido de la memoria local.`);
     }
   };
 
@@ -768,6 +795,8 @@ export const AdminDashboard: React.FC = () => {
   // Helper para abrir modales
   const openCreateModal = () => {
     setEditingSchool(null);
+    setGroupCode('');
+    setSchoolNames(['']);
     setSchoolName('');
     setDestination('Mar del Plata');
     setTravelDate('2026-10-15');
@@ -785,6 +814,8 @@ export const AdminDashboard: React.FC = () => {
   const openEditModal = (school: School, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingSchool(school);
+    setGroupCode(school.group_code || '');
+    setSchoolNames(school.school_names && school.school_names.length > 0 ? school.school_names : [school.name]);
     setSchoolName(school.name);
     setDestination(school.destination);
     setTravelDate(school.travel_date);
@@ -804,12 +835,19 @@ export const AdminDashboard: React.FC = () => {
     setEditingSchool(null);
   };
 
-  // Filtros y Buscador
+  // Filtros y Buscador (busca por número de grupo, nombre de colegio o destino)
   const filteredSchools = schools.filter(school => {
-    const matchesSearch = school.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          school.destination.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDest = destFilter === 'Todos' || school.destination === destFilter;
-    return matchesSearch && matchesDest;
+    const q = searchTerm.toLowerCase().trim();
+    if (!q) return destFilter === 'Todos' || school.destination === destFilter;
+
+    const matchesCode = (school.group_code || '').toLowerCase().includes(q);
+    const matchesName = school.name.toLowerCase().includes(q);
+    const matchesSchoolsList = school.school_names?.some(sn => sn.toLowerCase().includes(q)) || false;
+    const matchesDest = school.destination.toLowerCase().includes(q);
+
+    const matchesSearch = matchesCode || matchesName || matchesSchoolsList || matchesDest;
+    const matchesDestFilter = destFilter === 'Todos' || school.destination === destFilter;
+    return matchesSearch && matchesDestFilter;
   });
 
   // Cálculos de Paginación
@@ -1274,7 +1312,8 @@ export const AdminDashboard: React.FC = () => {
                     <table className="w-full text-left border-collapse select-none">
                       <thead>
                         <tr className="bg-zinc-900/40 border-b border-zinc-850">
-                          <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Colegio</th>
+                          <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Grupo / Código</th>
+                          <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Colegios Integrantes del Grupo</th>
                           <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Destino</th>
                           <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Fecha de Viaje</th>
                           <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-right">Acciones Administrativas</th>
@@ -1283,14 +1322,14 @@ export const AdminDashboard: React.FC = () => {
                       <tbody className="divide-y divide-zinc-900">
                         {loading ? (
                           <tr>
-                            <td colSpan={4} className="text-center py-20 text-xs text-zinc-500 font-bold uppercase tracking-wider animate-pulse">
-                              Cargando la base de datos de colegios...
+                            <td colSpan={5} className="text-center py-20 text-xs text-zinc-500 font-bold uppercase tracking-wider animate-pulse">
+                              Cargando la base de datos de grupos y colegios...
                             </td>
                           </tr>
                         ) : currentSchools.length === 0 ? (
                           <tr>
-                            <td colSpan={4} className="text-center py-20 text-zinc-600 text-xs font-bold uppercase tracking-wider">
-                              No se encontraron colegios con los filtros seleccionados
+                            <td colSpan={5} className="text-center py-20 text-zinc-600 text-xs font-bold uppercase tracking-wider">
+                              No se encontraron grupos o colegios con los filtros seleccionados
                             </td>
                           </tr>
                         ) : (
@@ -1300,18 +1339,33 @@ export const AdminDashboard: React.FC = () => {
                               onClick={() => setViewingGallerySchool(school)}
                               className="hover:bg-zinc-900/30 cursor-pointer transition-colors group"
                             >
-                              {/* Info Colegio */}
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-4">
-                                  <div className="w-11 h-11 rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 flex-shrink-0 relative">
+                              {/* Info Grupo */}
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 flex-shrink-0 relative">
                                     <img src={school.group_photo_web} alt={school.name} className="w-full h-full object-cover" />
                                   </div>
                                   <div>
-                                    <h4 className="text-xs sm:text-sm font-black text-white group-hover:text-primary transition-colors uppercase leading-none">
-                                      {school.name}
-                                    </h4>
-                                    <span className="text-[9px] text-zinc-500 uppercase tracking-wider block mt-1 font-semibold">ID: {school.id.slice(0,8)}...</span>
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-primary/10 border border-primary/30 text-primary text-[10px] font-black uppercase tracking-wider glow-yellow">
+                                      {school.group_code ? `Grupo ${school.group_code}` : 'Grupo Sin Código'}
+                                    </span>
+                                    <span className="text-[8.5px] text-zinc-500 uppercase tracking-wider block mt-1 font-semibold">ID: {school.id.slice(0,8)}...</span>
                                   </div>
+                                </div>
+                              </td>
+
+                              {/* Colegios Integrantes */}
+                              <td className="px-6 py-4">
+                                <div className="flex flex-wrap gap-1.5 max-w-md">
+                                  {school.school_names && school.school_names.length > 0 ? (
+                                    school.school_names.map((sName, sIdx) => (
+                                      <span key={sIdx} className="inline-flex items-center text-[10px] font-bold text-white bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-lg uppercase">
+                                        {sName}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="text-xs font-bold text-white uppercase">{school.name}</span>
+                                  )}
                                 </div>
                               </td>
 
@@ -1932,7 +1986,7 @@ export const AdminDashboard: React.FC = () => {
 
       </main>
 
-      {/* MODAL DE ALTA / EDICIÓN DE COLEGIO */}
+      {/* MODAL DE ALTA / EDICIÓN DE GRUPO DE VIAJE */}
       {showSchoolModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity">
           <div 
@@ -1944,10 +1998,10 @@ export const AdminDashboard: React.FC = () => {
               <div>
                 <h3 className="text-sm font-black uppercase text-white tracking-widest flex items-center gap-1.5 leading-none">
                   <Sparkles size={14} className="text-primary" />
-                  {editingSchool ? 'Editar Colegio' : 'Alta de Colegio'}
+                  {editingSchool ? 'Editar Grupo de Viaje' : 'Nuevo Grupo de Viaje'}
                 </h3>
                 <p className="text-[10px] text-zinc-500 uppercase mt-1 leading-none">
-                  {editingSchool ? 'Modificá la ficha del colegio' : 'Registrá una nueva escuela asociada al calendario'}
+                  {editingSchool ? 'Modificá la ficha y colegios integrantes de este grupo' : 'Registrá un grupo con sus colegios asociados para el calendario'}
                 </p>
               </div>
               <button 
@@ -1961,18 +2015,63 @@ export const AdminDashboard: React.FC = () => {
             {/* Formulario con scroll si es muy alto */}
             <form onSubmit={handleSaveSchool} className="p-6 space-y-4 overflow-y-auto flex-1 scrollbar-thin">
               
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
-                  Nombre del Colegio
+              {/* Campo 1: Número / Código de Grupo (Interno Admin) */}
+              <div className="bg-zinc-900/40 p-3.5 rounded-xl border border-zinc-850 space-y-1.5">
+                <label className="block text-[10px] font-black text-primary uppercase tracking-widest leading-none">
+                  Número / Código de Grupo (Uso Interno Admin)
                 </label>
                 <input
                   type="text"
-                  required
-                  value={schoolName}
-                  onChange={(e) => setSchoolName(e.target.value)}
-                  placeholder="Colegio San Martín 6to"
-                  className="w-full px-3.5 py-3 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none"
+                  value={groupCode}
+                  onChange={(e) => setGroupCode(e.target.value)}
+                  placeholder="Ej: 0001"
+                  className="w-full px-3 py-2.5 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-bold focus:outline-none"
                 />
+                <span className="text-[8.5px] text-zinc-500 font-semibold uppercase block">
+                  🔒 Identificador interno para administración. Los pasajeros no lo verán ni lo necesitan.
+                </span>
+              </div>
+
+              {/* Campo 2: Dinámica de Colegios Integrantes */}
+              <div className="space-y-2 pt-1">
+                <div className="flex justify-between items-center">
+                  <label className="block text-[10px] font-black text-zinc-300 uppercase tracking-widest">
+                    Colegios Integrantes del Grupo ({schoolNames.length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddSchoolNameField}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-[9px] font-black uppercase tracking-wider transition-colors"
+                  >
+                    <Plus size={11} />
+                    Agregar Colegio
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {schoolNames.map((nameVal, idx) => (
+                    <div key={`sn-input-${idx}`} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        required={idx === 0}
+                        value={nameVal}
+                        onChange={(e) => handleUpdateSchoolName(idx, e.target.value)}
+                        placeholder={`Ej: ${idx === 0 ? 'Colegio San Martín' : 'Instituto Belgrano'}`}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none"
+                      />
+                      {schoolNames.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSchoolNameField(idx)}
+                          className="p-2.5 rounded-xl bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-900/60 text-zinc-500 hover:text-red-400 transition-colors flex-shrink-0"
+                          title="Eliminar este colegio"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
