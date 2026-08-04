@@ -470,7 +470,7 @@ export const SchoolDetailPage: React.FC = () => {
       {/* Decorative Blur lights */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[600px] bg-gradient-to-b from-primary/5 via-transparent to-transparent blur-[120px] pointer-events-none z-0" />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-32 md:pb-24 relative z-10">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24 relative z-10">
         {/* Back and Share Bar */}
         <div className="flex items-center justify-between mb-8 select-none">
           <button

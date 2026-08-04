@@ -347,7 +347,7 @@ export const SurveyPage: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto w-full px-4 sm:px-6 pt-6 pb-28 md:pb-6 flex-1 flex items-center justify-center z-10">
+      <main className="max-w-2xl mx-auto w-full px-4 sm:px-6 py-6 flex-1 flex items-center justify-center z-10">
         
         {submitSuccess || votedToken ? (
           /* PANTALLA EXITO / BLOQUEO DE DOBLE VOTO */
@@ -569,7 +569,7 @@ export const SurveyPage: React.FC = () => {
       </main>
 
       {/* Footer simple */}
-      <footer className="max-w-4xl mx-auto w-full px-4 sm:px-6 pt-6 pb-28 md:pb-6 border-t border-zinc-900 text-center text-[9px] text-zinc-600 font-bold uppercase tracking-wider z-10 select-none flex-shrink-0">
+      <footer className="max-w-4xl mx-auto w-full px-4 sm:px-6 py-6 border-t border-zinc-900 text-center text-[9px] text-zinc-600 font-bold uppercase tracking-wider z-10 select-none flex-shrink-0">
         <span>© {new Date().getFullYear()} SuperTour — Todos los recuerdos en vivo</span>
       </footer>
 

@@ -127,7 +127,16 @@ export const Navbar: React.FC = () => {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between">
-          <div className="flex-shrink-0">
+          <div className="flex items-center gap-3">
+            {/* Mobile menu button (Hamburger) next to the logo */}
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="md:hidden inline-flex items-center justify-center p-2.5 rounded-xl text-zinc-400 hover:text-white bg-zinc-950/40 border border-zinc-800/80 active:scale-95 transition-all"
+              title="Menú"
+            >
+              {isOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+
             <Link to="/" onClick={handleScrollToTopOrNavigate} className="flex items-center">
               <Logo size="md" />
             </Link>
@@ -247,51 +256,69 @@ export const Navbar: React.FC = () => {
         </div>
       </div>
 
-      {/* Floating Bottom Nav Bar for Mobile Devices (Native App Feel) */}
-      <div className="md:hidden fixed bottom-6 left-4 right-4 z-50 h-16 bg-black/85 backdrop-blur-lg border border-zinc-800/60 rounded-2xl flex items-center justify-around shadow-premium px-2 animate-fade-in select-none">
-        <Link
-          to="/"
-          onClick={(e) => {
-            handleScrollToTopOrNavigate(e);
-          }}
-          className={`flex flex-col items-center justify-center flex-1 h-full transition-colors active:scale-90 duration-200 ${
-            isActive('/') && activeSection === 'inicio' ? 'text-primary' : 'text-zinc-500'
-          }`}
-        >
-          <Home size={18} className={isActive('/') && activeSection === 'inicio' ? 'glow-text-yellow' : ''} />
-          <span className="text-[8px] font-black uppercase tracking-wider mt-1.5">Inicio</span>
-        </Link>
+      {/* Premium Dropdown Mobile Menu */}
+      <div
+        className={`md:hidden absolute top-full left-0 right-0 bg-black/95 backdrop-blur-xl border-b border-zinc-800/80 transition-all duration-300 ease-in-out ${
+          isOpen ? 'opacity-100 translate-y-0 visible' : 'opacity-0 -translate-y-4 invisible'
+        }`}
+      >
+        <div className="px-4 pt-2 pb-6 space-y-3">
+          <Link
+            to="/"
+            onClick={(e) => {
+              setIsOpen(false);
+              handleScrollToTopOrNavigate(e);
+            }}
+            className={`block px-4 py-3 rounded-xl text-base font-black tracking-wide uppercase transition-all active:scale-98 ${
+              isActive('/') && activeSection === 'inicio' 
+                ? 'text-primary bg-primary/10 border border-primary/20 glow-yellow' 
+                : 'text-zinc-300 hover:text-white hover:bg-zinc-900/40 border border-transparent'
+            }`}
+          >
+            Inicio
+          </Link>
+          
+          <a
+            href="#destinos"
+            onClick={(e) => {
+              setIsOpen(false);
+              handleScrollToDestinos(e);
+            }}
+            className={`block px-4 py-3 rounded-xl text-base font-black tracking-wide uppercase transition-all active:scale-98 ${
+              isActive('/') && activeSection === 'destinos' 
+                ? 'text-primary bg-primary/10 border border-primary/20 glow-yellow' 
+                : 'text-zinc-300 hover:text-white hover:bg-zinc-900/40 border border-transparent'
+            }`}
+          >
+            Destinos
+          </a>
 
-        <a
-          href="#destinos"
-          onClick={handleScrollToDestinos}
-          className={`flex flex-col items-center justify-center flex-1 h-full transition-colors active:scale-90 duration-200 ${
-            isActive('/') && activeSection === 'destinos' ? 'text-primary' : 'text-zinc-500'
-          }`}
-        >
-          <Compass size={18} className={isActive('/') && activeSection === 'destinos' ? 'glow-text-yellow' : ''} />
-          <span className="text-[8px] font-black uppercase tracking-wider mt-1.5">Destinos</span>
-        </a>
+          <a
+            href="#nosotros"
+            onClick={(e) => {
+              setIsOpen(false);
+              handleScrollToNosotros(e);
+            }}
+            className={`block px-4 py-3 rounded-xl text-base font-black tracking-wide uppercase transition-all active:scale-98 ${
+              isActive('/') && activeSection === 'nosotros' 
+                ? 'text-primary bg-primary/10 border border-primary/20 glow-yellow' 
+                : 'text-zinc-300 hover:text-white hover:bg-zinc-900/40 border border-transparent'
+            }`}
+          >
+            Nosotros
+          </a>
 
-        <a
-          href="#nosotros"
-          onClick={handleScrollToNosotros}
-          className={`flex flex-col items-center justify-center flex-1 h-full transition-colors active:scale-90 duration-200 ${
-            isActive('/') && activeSection === 'nosotros' ? 'text-primary' : 'text-zinc-500'
-          }`}
-        >
-          <Info size={18} className={isActive('/') && activeSection === 'nosotros' ? 'glow-text-yellow' : ''} />
-          <span className="text-[8px] font-black uppercase tracking-wider mt-1.5">Nosotros</span>
-        </a>
-
-        <a
-          href="#contacto"
-          onClick={triggerContactModal}
-          className="flex flex-col items-center justify-center flex-1 h-full transition-colors active:scale-90 duration-200 text-zinc-500 hover:text-white"
-        >
-          <MessageSquare size={18} />
-          <span className="text-[8px] font-black uppercase tracking-wider mt-1.5">Contacto</span>
-        </a>
+          <a
+            href="#contacto"
+            onClick={(e) => {
+              setIsOpen(false);
+              triggerContactModal(e);
+            }}
+            className="block px-4 py-3 rounded-xl text-base font-black tracking-wide uppercase text-zinc-300 hover:text-white hover:bg-zinc-900/40 border border-transparent transition-all active:scale-98"
+          >
+            Contacto
+          </a>
+        </div>
       </div>
     </nav>
   );
