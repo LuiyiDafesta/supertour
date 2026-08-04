@@ -553,23 +553,22 @@ export const SchoolDetailPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Selector de Colegios Integrantes (si el grupo tiene más de un colegio) */}
         {school.school_items && school.school_items.length > 1 && (
-          <div className="mb-10 p-4 rounded-2xl bg-zinc-950/90 border border-zinc-850 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
-            <span className="text-xs font-black text-zinc-300 uppercase tracking-wider flex items-center gap-1.5 leading-none">
+          <div className="mb-10 p-5 rounded-2xl bg-zinc-950/90 border border-zinc-850 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+            <span className="text-xs font-black text-zinc-300 uppercase tracking-wider flex items-center justify-center md:justify-start gap-1.5 leading-none text-center md:text-left w-full md:w-auto">
               <Sparkles size={15} className="text-primary animate-pulse" />
               Seleccioná tu colegio para ver su foto y video:
             </span>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col w-full md:flex-row md:w-auto md:flex-wrap md:items-center gap-2">
               {school.school_items.map((sItem, sIdx) => {
                 const isSelected = selectedSchoolIdx === sIdx;
                 return (
                   <button
                     key={sItem.id || sIdx}
                     onClick={() => setSelectedSchoolIdx(sIdx)}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 ${
+                    className={`w-full md:w-auto text-center px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 ${
                       isSelected
-                        ? 'bg-primary text-black glow-yellow scale-[1.02]'
+                        ? 'bg-primary text-black glow-yellow scale-[1.01]'
                         : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
                     }`}
                   >
@@ -650,16 +649,16 @@ export const SchoolDetailPage: React.FC = () => {
                 </p>
               </div>
 
-              <div className="flex-shrink-0">
+              <div className="flex-shrink-0 w-full md:w-auto">
                 {hasVoted ? (
-                  <div className="px-5 py-3.5 rounded-xl bg-emerald-950/40 border border-emerald-900/60 text-emerald-400 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md">
+                  <div className="px-5 py-3.5 rounded-xl bg-emerald-950/40 border border-emerald-900/60 text-emerald-400 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md w-full">
                     <CheckCircle2 size={15} />
                     Encuesta Respondida ✓
                   </div>
                 ) : (
                   <button
                     onClick={() => navigate(`/encuesta/${activeSurvey.id}?schoolId=${school.id}`)}
-                    className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-[1.03] glow-yellow shadow-md"
+                    className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-[1.03] glow-yellow shadow-md w-full"
                   >
                     <Send size={13} />
                     Responder Encuesta
@@ -688,13 +687,13 @@ export const SchoolDetailPage: React.FC = () => {
               </p>
             </div>
 
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0 w-full md:w-auto">
               <a
                 href={bannerUrl}
                 onClick={handleBannerClick}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-[1.03] glow-yellow shadow-md"
+                className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-[1.03] glow-yellow shadow-md w-full"
               >
                 <Sparkles size={13} />
                 Ir a la Tienda

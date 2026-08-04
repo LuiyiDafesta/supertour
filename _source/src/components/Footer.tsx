@@ -219,16 +219,16 @@ export const Footer: React.FC = () => {
 
       {/* Interactive Floating Contact Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto transition-opacity duration-300">
           <div 
-            className="relative w-full max-w-lg overflow-hidden border border-zinc-800 rounded-2xl bg-[#09090b] shadow-[0_0_50px_rgba(250,204,21,0.1)] transition-all transform scale-100"
+            className="relative w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden border border-zinc-800 rounded-2xl bg-[#09090b] shadow-[0_0_50px_rgba(250,204,21,0.1)] transition-all transform scale-100"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Symmetrical decoration */}
             <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-primary/20 via-primary to-primary/20" />
 
             {/* Modal Header */}
-            <div className="px-6 pt-6 pb-4 flex items-center justify-between border-b border-zinc-900">
+            <div className="px-6 pt-6 pb-4 flex items-center justify-between border-b border-zinc-900 flex-shrink-0">
               <div>
                 <h3 className="text-xl font-black uppercase text-white tracking-wider">
                   Contáctanos
@@ -246,7 +246,7 @@ export const Footer: React.FC = () => {
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
               
               {/* Row 1: Nombre */}
               <div>
