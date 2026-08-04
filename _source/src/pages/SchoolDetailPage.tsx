@@ -17,6 +17,16 @@ export const SchoolDetailPage: React.FC = () => {
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [shareText, setShareText] = useState('Compartir');
+  const [selectedSchoolIdx, setSelectedSchoolIdx] = useState(0);
+
+  const activeSchoolItem = school?.school_items && school.school_items.length > 0
+    ? (school.school_items[selectedSchoolIdx] || school.school_items[0])
+    : null;
+
+  const activeSchoolName = activeSchoolItem?.name || school?.name || '';
+  const activePhotoWeb = activeSchoolItem?.group_photo_web || school?.group_photo_web || '';
+  const activePhotoHd = activeSchoolItem?.group_photo_hd || school?.group_photo_hd || '';
+  const activeVideo = activeSchoolItem?.multimedia_url || school?.multimedia_url || '';
 
   // Survey states
   const [activeSurvey, setActiveSurvey] = useState<any | null>(null);
@@ -462,31 +472,61 @@ export const SchoolDetailPage: React.FC = () => {
 
             {/* Quick Actions (Downloads) */}
             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-              {school.multimedia_url && 
-               school.multimedia_url.trim() !== '' && 
-               school.multimedia_url !== 'https://demo.backblaze.com/download/viaje.zip' && (
+              {activeVideo && 
+               activeVideo.trim() !== '' && 
+               activeVideo !== 'https://demo.backblaze.com/download/viaje.zip' && (
                 <a
-                  href={school.multimedia_url}
-                  download={`SuperTour-${school.name}-Multimedia.zip`}
+                  href={activeVideo}
+                  download={`SuperTour-${activeSchoolName}-Multimedia.zip`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 font-black text-xs uppercase tracking-wider text-white transition-all duration-300 w-full sm:w-auto"
                 >
                   <Film size={16} className="text-primary" />
-                  Descargar Video del Viaje
+                  Descargar Video ({activeSchoolName})
                 </a>
               )}
               
-              <button
-                onClick={() => downloadFileDirectly(school.group_photo_hd, `SuperTour-${school.name}-FotoGrupal.jpg`)}
-                className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-all duration-300 w-full sm:w-auto glow-yellow"
-              >
-                <Download size={16} />
-                Descargar Foto Grupal HD
-              </button>
+              {activePhotoHd && (
+                <button
+                  onClick={() => downloadFileDirectly(activePhotoHd, `SuperTour-${activeSchoolName}-FotoGrupal.jpg`)}
+                  className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-all duration-300 w-full sm:w-auto glow-yellow"
+                >
+                  <Download size={16} />
+                  Descargar Foto Grupal HD
+                </button>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Selector de Colegios Integrantes (si el grupo tiene más de un colegio) */}
+        {school.school_items && school.school_items.length > 1 && (
+          <div className="mb-10 p-4 rounded-2xl bg-zinc-950/90 border border-zinc-850 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+            <span className="text-xs font-black text-zinc-300 uppercase tracking-wider flex items-center gap-1.5 leading-none">
+              <Sparkles size={15} className="text-primary animate-pulse" />
+              Seleccioná tu colegio para ver su foto y video:
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {school.school_items.map((sItem, sIdx) => {
+                const isSelected = selectedSchoolIdx === sIdx;
+                return (
+                  <button
+                    key={sItem.id || sIdx}
+                    onClick={() => setSelectedSchoolIdx(sIdx)}
+                    className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 ${
+                      isSelected
+                        ? 'bg-primary text-black glow-yellow scale-[1.02]'
+                        : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                    }`}
+                  >
+                    {sItem.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Featured Group Photo Frame */}
         <section className="mb-16 select-none">
@@ -496,23 +536,23 @@ export const SchoolDetailPage: React.FC = () => {
             </span>
             <h2 className="text-xl sm:text-2xl font-black text-white mt-1 uppercase tracking-tight flex items-center justify-center md:justify-start gap-2">
               <Users size={20} className="text-primary" />
-              La Foto Grupal Oficial
+              La Foto Grupal Oficial {school.school_items && school.school_items.length > 1 ? `— ${activeSchoolName}` : ''}
             </h2>
           </div>
 
           <div className="glass-card rounded-3xl overflow-hidden p-3 border border-zinc-800/40 shadow-premium">
             <div className="relative aspect-[16/9] w-full rounded-2xl overflow-hidden border border-zinc-900 group">
               <img
-                src={school.group_photo_web}
-                alt={`${school.name} - Foto Grupal`}
+                src={activePhotoWeb || school.group_photo_web}
+                alt={`${activeSchoolName} - Foto Grupal`}
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.01]"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-between p-6">
                 <span className="text-xs font-bold text-zinc-300 uppercase tracking-widest">
-                  Viaje a {school.destination} • {formatDate(school.travel_date)}
+                  {activeSchoolName} • Viaje a {school.destination} • {formatDate(school.travel_date)}
                 </span>
                 <button
-                  onClick={() => downloadFileDirectly(school.group_photo_hd, `SuperTour-${school.name}-Grupal.jpg`)}
+                  onClick={() => downloadFileDirectly(activePhotoHd || school.group_photo_hd, `SuperTour-${activeSchoolName}-Grupal.jpg`)}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-black text-xs font-black uppercase tracking-wider transition-transform scale-95 group-hover:scale-100 duration-300"
                 >
                   <Download size={12} />

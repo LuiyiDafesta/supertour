@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { School, GalleryPhoto } from '../types/database';
+import { School, GalleryPhoto, SchoolItem } from '../types/database';
 import { Navbar } from '../components/Navbar';
 import { Uploader } from '../components/Uploader';
 import { getAnalyticsEvents, AnalyticsEvent } from '../lib/analytics';
@@ -55,6 +55,7 @@ export const AdminDashboard: React.FC = () => {
   const [editingSchool, setEditingSchool] = useState<School | null>(null); // null significa Crear Nuevo
   const [groupCode, setGroupCode] = useState('');
   const [schoolNames, setSchoolNames] = useState<string[]>(['']);
+  const [schoolItems, setSchoolItems] = useState<SchoolItem[]>([]);
   const [schoolName, setSchoolName] = useState('');
   const [destination, setDestination] = useState<'Mar del Plata' | 'Villa Carlos Paz'>('Mar del Plata');
   const [travelDate, setTravelDate] = useState('2026-10-15');
@@ -663,17 +664,86 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Manejadores para dinámica de colegios integrantes
-  const handleAddSchoolNameField = () => {
-    setSchoolNames(prev => [...prev, '']);
+  // Manejadores para dinámica de colegios integrantes y sus archivos (Fotos/Videos)
+  const handleAddSchoolItem = () => {
+    setSchoolItems(prev => [
+      ...prev,
+      { id: `si-${Date.now()}-${prev.length}`, name: '', group_photo_web: '', group_photo_hd: '', multimedia_url: '' }
+    ]);
   };
 
-  const handleUpdateSchoolName = (index: number, val: string) => {
-    setSchoolNames(prev => prev.map((s, i) => i === index ? val : s));
+  const handleUpdateSchoolItem = (index: number, field: keyof SchoolItem, value: string) => {
+    setSchoolItems(prev => prev.map((item, i) => i === index ? { ...item, [field]: value } : item));
   };
 
-  const handleRemoveSchoolNameField = (index: number) => {
-    setSchoolNames(prev => prev.filter((_, i) => i !== index));
+  const handleRemoveSchoolItem = (index: number) => {
+    setSchoolItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSchoolItemPhotoUpload = async (index: number, file: File | undefined) => {
+    if (!file) return;
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      const compressedFile = await compressImage(file, 1600, 0.80);
+      const timestamp = Date.now();
+      const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+      const remotePathWeb = `group-photos/web/${timestamp}-${cleanName}`;
+      const remotePathHd = `group-photos/hd/${timestamp}-${cleanName}`;
+
+      let webUrl = '';
+      let hdUrl = '';
+      try {
+        const formDataWeb = new FormData();
+        formDataWeb.append('file', compressedFile);
+        formDataWeb.append('filename', remotePathWeb);
+        const resWeb = await fetch('/upload.php', { method: 'POST', body: formDataWeb });
+        const dataWeb = await resWeb.json();
+        webUrl = dataWeb.url;
+
+        const formDataHd = new FormData();
+        formDataHd.append('file', file);
+        formDataHd.append('filename', remotePathHd);
+        const resHd = await fetch('/upload.php', { method: 'POST', body: formDataHd });
+        const dataHd = await resHd.json();
+        hdUrl = dataHd.url;
+      } catch {
+        webUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&sig=${timestamp}`;
+        hdUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1600&sig=${timestamp}`;
+      }
+
+      setSchoolItems(prev => prev.map((item, i) => i === index ? { ...item, group_photo_web: webUrl, group_photo_hd: hdUrl } : item));
+      setSuccessMsg(`Foto grupal de "${schoolItems[index]?.name || 'colegio'}" procesada y cargada.`);
+    } catch (err: any) {
+      setErrorMsg('Error al procesar la foto grupal del colegio.');
+    }
+  };
+
+  const handleSchoolItemVideoUpload = async (index: number, file: File | undefined) => {
+    if (!file) return;
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      const timestamp = Date.now();
+      const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+      const remotePath = `multimedia/${timestamp}-${cleanName}`;
+      let videoUrl = '';
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('filename', remotePath);
+        const res = await fetch('/upload.php', { method: 'POST', body: formData });
+        const data = await res.json();
+        videoUrl = data.url;
+      } catch {
+        videoUrl = `https://demo.backblaze.com/download/viaje-${timestamp}.zip`;
+      }
+
+      setSchoolItems(prev => prev.map((item, i) => i === index ? { ...item, multimedia_url: videoUrl } : item));
+      setSuccessMsg(`Video/Zip del colegio "${schoolItems[index]?.name || ''}" subido.`);
+    } catch (err: any) {
+      setErrorMsg('Error al procesar el archivo multimedia del colegio.');
+    }
   };
 
   // Guardar (Crear o Editar) Grupo de Viaje
@@ -686,18 +756,24 @@ export const AdminDashboard: React.FC = () => {
       ? 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=800'
       : 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800';
 
-    const cleanedSchoolNames = schoolNames.map(s => s.trim()).filter(Boolean);
+    const cleanedItems = schoolItems.filter(item => item.name.trim() !== '');
+    const cleanedSchoolNames = cleanedItems.map(item => item.name.trim());
     const displayName = cleanedSchoolNames.length > 0 ? cleanedSchoolNames.join(', ') : (schoolName || 'Grupo Sin Nombre');
+
+    const primaryWebPhoto = cleanedItems[0]?.group_photo_web || groupWebUrl || defaultPhoto;
+    const primaryHdPhoto = cleanedItems[0]?.group_photo_hd || groupHdUrl || defaultPhoto.replace('w=800', 'w=1600');
+    const primaryVideo = cleanedItems[0]?.multimedia_url || multimediaUrl || 'https://demo.backblaze.com/download/viaje.zip';
 
     const schoolData = {
       group_code: groupCode.trim(),
       school_names: cleanedSchoolNames,
+      school_items: cleanedItems,
       name: displayName,
       destination,
       travel_date: travelDate,
-      group_photo_web: groupWebUrl || defaultPhoto,
-      group_photo_hd: groupHdUrl || defaultPhoto.replace('w=800', 'w=1600'),
-      multimedia_url: multimediaUrl || 'https://demo.backblaze.com/download/viaje.zip'
+      group_photo_web: primaryWebPhoto,
+      group_photo_hd: primaryHdPhoto,
+      multimedia_url: primaryVideo
     };
 
     try {
@@ -797,6 +873,9 @@ export const AdminDashboard: React.FC = () => {
     setEditingSchool(null);
     setGroupCode('');
     setSchoolNames(['']);
+    setSchoolItems([
+      { id: `si-${Date.now()}-0`, name: '', group_photo_web: '', group_photo_hd: '', multimedia_url: '' }
+    ]);
     setSchoolName('');
     setDestination('Mar del Plata');
     setTravelDate('2026-10-15');
@@ -816,6 +895,29 @@ export const AdminDashboard: React.FC = () => {
     setEditingSchool(school);
     setGroupCode(school.group_code || '');
     setSchoolNames(school.school_names && school.school_names.length > 0 ? school.school_names : [school.name]);
+    
+    if (school.school_items && school.school_items.length > 0) {
+      setSchoolItems(JSON.parse(JSON.stringify(school.school_items)));
+    } else if (school.school_names && school.school_names.length > 0) {
+      setSchoolItems(school.school_names.map((nameStr, idx) => ({
+        id: `si-${Date.now()}-${idx}`,
+        name: nameStr,
+        group_photo_web: idx === 0 ? school.group_photo_web : '',
+        group_photo_hd: idx === 0 ? school.group_photo_hd : '',
+        multimedia_url: idx === 0 ? school.multimedia_url : ''
+      })));
+    } else {
+      setSchoolItems([
+        {
+          id: `si-${Date.now()}-0`,
+          name: school.name,
+          group_photo_web: school.group_photo_web,
+          group_photo_hd: school.group_photo_hd,
+          multimedia_url: school.multimedia_url
+        }
+      ]);
+    }
+
     setSchoolName(school.name);
     setDestination(school.destination);
     setTravelDate(school.travel_date);
@@ -2032,43 +2134,151 @@ export const AdminDashboard: React.FC = () => {
                 </span>
               </div>
 
-              {/* Campo 2: Dinámica de Colegios Integrantes */}
-              <div className="space-y-2 pt-1">
+              {/* Campo 2: Dinámica de Colegios Integrantes y sus Archivos */}
+              <div className="space-y-3 pt-1">
                 <div className="flex justify-between items-center">
-                  <label className="block text-[10px] font-black text-zinc-300 uppercase tracking-widest">
-                    Colegios Integrantes del Grupo ({schoolNames.length})
-                  </label>
+                  <div>
+                    <label className="block text-[10px] font-black text-zinc-200 uppercase tracking-widest leading-none">
+                      Colegios Integrantes ({schoolItems.length})
+                    </label>
+                    <span className="text-[8.5px] text-zinc-500 font-semibold uppercase block mt-1">
+                      Cada colegio posee su foto grupal y video propio. La galería es común a todo el grupo.
+                    </span>
+                  </div>
                   <button
                     type="button"
-                    onClick={handleAddSchoolNameField}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-[9px] font-black uppercase tracking-wider transition-colors"
+                    onClick={handleAddSchoolItem}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-[9px] font-black uppercase tracking-wider transition-colors flex-shrink-0"
                   >
-                    <Plus size={11} />
+                    <Plus size={12} />
                     Agregar Colegio
                   </button>
                 </div>
 
-                <div className="space-y-2">
-                  {schoolNames.map((nameVal, idx) => (
-                    <div key={`sn-input-${idx}`} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        required={idx === 0}
-                        value={nameVal}
-                        onChange={(e) => handleUpdateSchoolName(idx, e.target.value)}
-                        placeholder={`Ej: ${idx === 0 ? 'Colegio San Martín' : 'Instituto Belgrano'}`}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none"
-                      />
-                      {schoolNames.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSchoolNameField(idx)}
-                          className="p-2.5 rounded-xl bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-900/60 text-zinc-500 hover:text-red-400 transition-colors flex-shrink-0"
-                          title="Eliminar este colegio"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      )}
+                <div className="space-y-3">
+                  {schoolItems.map((item, idx) => (
+                    <div key={item.id || `si-${idx}`} className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30 space-y-3 relative group">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-primary uppercase tracking-widest flex items-center gap-1">
+                          <Sparkles size={11} /> Colegio #{idx + 1}
+                        </span>
+                        {schoolItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSchoolItem(idx)}
+                            className="p-1 rounded-lg bg-zinc-900 hover:bg-red-950/60 text-zinc-500 hover:text-red-400 border border-zinc-800 transition-colors"
+                            title="Eliminar este colegio"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Nombre del Colegio */}
+                      <div>
+                        <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
+                          Nombre del Colegio *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={item.name}
+                          onChange={(e) => handleUpdateSchoolItem(idx, 'name', e.target.value)}
+                          placeholder={`Ej: ${idx === 0 ? 'EGB Colegio San Martín' : 'Instituto Belgrano'}`}
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Foto Grupal Oficial de este Colegio */}
+                      <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-850 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black text-zinc-300 uppercase tracking-wider flex items-center gap-1">
+                            <ImageIcon size={11} className="text-primary" /> Foto Grupal Oficial (HD)
+                          </span>
+                          {item.group_photo_web && (
+                            <span className="text-[8px] text-emerald-400 font-bold uppercase flex items-center gap-1">
+                              <Check size={10} /> Foto Cargada
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <label className="flex-1 py-2 px-3 rounded-lg border border-dashed border-zinc-750 hover:border-primary/40 bg-zinc-900/40 hover:bg-zinc-900 cursor-pointer text-center transition-all">
+                            <span className="text-[9.5px] font-bold text-zinc-300 uppercase block">
+                              {item.group_photo_web ? '📁 Cambiar Foto Grupal' : '☁️ Seleccionar Foto Grupal'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleSchoolItemPhotoUpload(idx, e.target.files?.[0])}
+                              className="hidden"
+                            />
+                          </label>
+
+                          {item.group_photo_web && (
+                            <div className="w-12 h-12 rounded-lg border border-zinc-800 overflow-hidden bg-zinc-950 relative group/img flex-shrink-0">
+                              <img src={item.group_photo_web} alt={item.name} className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleUpdateSchoolItem(idx, 'group_photo_web', '');
+                                  handleUpdateSchoolItem(idx, 'group_photo_hd', '');
+                                }}
+                                className="absolute inset-0 bg-black/80 opacity-0 group-hover/img:opacity-100 flex items-center justify-center text-red-400 transition-opacity"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Video / Archivo Zip de este Colegio */}
+                      <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-850 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black text-zinc-300 uppercase tracking-wider flex items-center gap-1">
+                            <Film size={11} className="text-primary" /> Video / Archivo Zip (Opcional)
+                          </span>
+                          {item.multimedia_url && (
+                            <span className="text-[8px] text-emerald-400 font-bold uppercase flex items-center gap-1">
+                              <Check size={10} /> Video Cargado
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <label className="flex-1 py-2 px-3 rounded-lg border border-dashed border-zinc-750 hover:border-primary/40 bg-zinc-900/40 hover:bg-zinc-900 cursor-pointer text-center transition-all">
+                            <span className="text-[9.5px] font-bold text-zinc-300 uppercase block truncate">
+                              {item.multimedia_url ? '📁 Cambiar Video/Zip' : '🎥 Seleccionar Video/Zip'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="video/*,application/zip,application/x-zip-compressed"
+                              onChange={(e) => handleSchoolItemVideoUpload(idx, e.target.files?.[0])}
+                              className="hidden"
+                            />
+                          </label>
+
+                          {item.multimedia_url && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateSchoolItem(idx, 'multimedia_url', '')}
+                              className="p-2 rounded-lg bg-zinc-900 hover:bg-red-950/50 border border-zinc-800 text-zinc-400 hover:text-red-400 transition-colors flex-shrink-0"
+                              title="Remover Video"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+
+                        <input
+                          type="url"
+                          value={item.multimedia_url || ''}
+                          onChange={(e) => handleUpdateSchoolItem(idx, 'multimedia_url', e.target.value)}
+                          placeholder="https://backblaze.com/video.zip (Enlace Manual)"
+                          className="w-full px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-[9.5px] font-mono focus:outline-none"
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -2099,154 +2309,6 @@ export const AdminDashboard: React.FC = () => {
                     value={travelDate}
                     onChange={(e) => setTravelDate(e.target.value)}
                     className="w-full px-3.5 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs font-bold focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Portal de Carga de Foto Grupal Oficial */}
-              <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-3">
-                <span className="block text-[10px] font-black text-primary uppercase tracking-widest leading-none">Foto Grupal Oficial (HD)</span>
-                
-                <div className="flex items-center gap-3">
-                  <label className="flex-1 flex flex-col items-center justify-center py-4.5 px-3 rounded-lg border border-dashed border-zinc-700 hover:border-primary/40 bg-zinc-950/40 hover:bg-zinc-900/40 cursor-pointer text-center transition-all group">
-                    <CloudUpload size={20} className="text-zinc-500 group-hover:text-primary transition-colors mb-1" />
-                    <span className="text-[10px] font-bold text-zinc-300 group-hover:text-white transition-colors uppercase">Seleccionar Foto</span>
-                    <span className="text-[8px] text-zinc-500 uppercase mt-0.5">Se procesará en alta y baja</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={groupPhotoUploading}
-                      onChange={handleGroupPhotoChange}
-                      className="hidden"
-                    />
-                  </label>
-                  
-                  {groupWebUrl && (
-                    <div className="w-16 h-16 rounded-lg border border-zinc-850 overflow-hidden bg-zinc-950 flex-shrink-0 relative group">
-                      <img src={groupWebUrl} alt="Grupal" className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => { setGroupWebUrl(''); setGroupHdUrl(''); }}
-                        className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 flex items-center justify-center text-red-400 transition-opacity"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {groupPhotoUploading && (
-                  <div className="space-y-1 select-none">
-                    <div className="flex justify-between items-center text-[9px] font-bold text-zinc-400 uppercase tracking-wider">
-                      <span>{groupPhotoStatus}</span>
-                      <span className="text-primary">{groupPhotoProgress}%</span>
-                    </div>
-                    <div className="w-full h-1 bg-zinc-950 rounded-full overflow-hidden border border-zinc-850/80">
-                      <div className="h-full bg-primary transition-all duration-300" style={{ width: `${groupPhotoProgress}%` }} />
-                    </div>
-                  </div>
-                )}
-                
-                {groupWebUrl && !groupPhotoUploading && (
-                  <div className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                    <Check size={10} /> Foto grupal cargada con éxito
-                  </div>
-                )}
-              </div>
-
-              {/* Ajustes manuales avanzados */}
-              <details className="text-[10px] text-zinc-500 font-bold uppercase select-none">
-                <summary className="cursor-pointer hover:text-zinc-300 transition-colors py-1">Ajustar URLs manualmente (Avanzado)</summary>
-                <div className="space-y-2.5 mt-2.5 pt-2.5 border-t border-zinc-900">
-                  <div>
-                    <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
-                      Foto Grupal Web (URL)
-                    </label>
-                    <input
-                      type="url"
-                      value={groupWebUrl}
-                      onChange={(e) => setGroupWebUrl(e.target.value)}
-                      placeholder="https://backblaze.com/web.jpg"
-                      className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
-                      Foto Grupal HD (URL)
-                    </label>
-                    <input
-                      type="url"
-                      value={groupHdUrl}
-                      onChange={(e) => setGroupHdUrl(e.target.value)}
-                      placeholder="https://backblaze.com/hd.jpg"
-                      className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none"
-                    />
-                  </div>
-                </div>
-              </details>
-
-              {/* Portal de Carga de Video/Zip B2 */}
-              <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-3">
-                <span className="block text-[10px] font-black text-primary uppercase tracking-widest leading-none">Video / Archivo Zip del Viaje (Opcional)</span>
-                
-                <div className="flex items-center gap-3">
-                  <label className="flex-1 flex flex-col items-center justify-center py-4 px-3 rounded-lg border border-dashed border-zinc-700 hover:border-primary/40 bg-zinc-950/40 hover:bg-zinc-900/40 cursor-pointer text-center transition-all group">
-                    <CloudUpload size={20} className="text-zinc-500 group-hover:text-primary transition-colors mb-1" />
-                    <span className="text-[10px] font-bold text-zinc-300 group-hover:text-white transition-colors uppercase">Seleccionar Video/Zip</span>
-                    <span className="text-[8px] text-zinc-500 uppercase mt-0.5">MP4, MOV, AVI o ZIP</span>
-                    <input
-                      type="file"
-                      accept="video/*,application/zip,application/x-zip-compressed"
-                      disabled={videoUploading}
-                      onChange={handleVideoFileChange}
-                      className="hidden"
-                    />
-                  </label>
-
-                  {multimediaUrl && (
-                    <div className="w-16 h-16 rounded-lg border border-zinc-850 bg-zinc-950 flex flex-col items-center justify-center relative group p-2 text-center select-none flex-shrink-0">
-                      <Film size={20} className="text-primary animate-pulse" />
-                      <span className="text-[7px] text-zinc-400 font-bold uppercase tracking-wider block mt-1 truncate max-w-full">Cargado</span>
-                      <button
-                        type="button"
-                        onClick={() => setMultimediaUrl('')}
-                        className="absolute inset-0 bg-black/85 opacity-0 group-hover:opacity-100 flex items-center justify-center text-red-400 transition-opacity rounded-lg"
-                        title="Remover Video"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {videoUploading && (
-                  <div className="space-y-1 select-none">
-                    <div className="flex justify-between items-center text-[9px] font-bold text-zinc-400 uppercase tracking-wider">
-                      <span>{videoStatus}</span>
-                      <span className="text-primary">{videoProgress}%</span>
-                    </div>
-                    <div className="w-full h-1 bg-zinc-950 rounded-full overflow-hidden border border-zinc-850/80">
-                      <div className="h-full bg-primary transition-all duration-300" style={{ width: `${videoProgress}%` }} />
-                    </div>
-                  </div>
-                )}
-                
-                {multimediaUrl && !videoUploading && (
-                  <div className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                    <Check size={10} /> Enlace de video asociado correctamente
-                  </div>
-                )}
-
-                <div className="pt-1.5 border-t border-zinc-900/60">
-                  <label className="block text-[8px] font-bold text-zinc-500 uppercase tracking-wider mb-1">
-                    Enlace de Video/Zip B2 (Manual)
-                  </label>
-                  <input
-                    type="url"
-                    value={multimediaUrl}
-                    onChange={(e) => setMultimediaUrl(e.target.value)}
-                    placeholder="https://backblaze.com/video.zip"
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-[11px] font-semibold focus:outline-none"
                   />
                 </div>
               </div>
