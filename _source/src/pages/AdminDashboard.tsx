@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { useSEO } from '../hooks/useSEO';
 import { compressImage } from '../lib/imageCompressor';
+import { toast } from 'sonner';
 
 export const AdminDashboard: React.FC = () => {
   useSEO({
@@ -806,10 +807,13 @@ export const AdminDashboard: React.FC = () => {
         closeSchoolModal();
       }
     } catch (err: any) {
-      console.warn('DB insert/update failed, running offline state update.');
+      console.error('DB insert/update failed:', err);
+      const dbErrorMessage = err?.message || JSON.stringify(err) || 'Error desconocido';
+      setErrorMsg(`Error de Base de Datos: ${dbErrorMessage}. El grupo se guardó temporalmente en la memoria del navegador (Modo Offline).`);
+      toast.error(`Error al guardar en base de datos: ${dbErrorMessage}`);
+      
       if (editingSchool) {
         setSchools(prev => prev.map(s => s.id === editingSchool.id ? { ...s, ...schoolData } : s));
-        setSuccessMsg(`[Modo Offline] Grupo "${groupCode || displayName}" actualizado localmente.`);
       } else {
         const offlineId = `offline-school-${Date.now()}`;
         const offlineSchool: School = {
@@ -817,7 +821,6 @@ export const AdminDashboard: React.FC = () => {
           ...schoolData
         };
         setSchools(prev => [offlineSchool, ...prev]);
-        setSuccessMsg(`[Modo Offline] Grupo "${groupCode || displayName}" creado localmente.`);
       }
       closeSchoolModal();
     }
