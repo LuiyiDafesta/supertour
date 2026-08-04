@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 declare global {
   interface Window {
@@ -10,6 +11,48 @@ declare global {
 
 export const AnalyticsTracker: React.FC = () => {
   const location = useLocation();
+
+  // Load and inject custom Visitor Tracking / HTML tracking script on mount
+  useEffect(() => {
+    const fetchAndInjectScript = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('supertour_settings')
+          .select('value')
+          .eq('key', 'visitor_tracking_script')
+          .maybeSingle();
+
+        if (!error && data && data.value && data.value.trim() !== '') {
+          const existing = document.getElementById('supertour-visitor-tracking');
+          if (!existing) {
+            const container = document.createElement('div');
+            container.innerHTML = data.value;
+            const scripts = container.querySelectorAll('script');
+            
+            scripts.forEach(script => {
+              const newScript = document.createElement('script');
+              // Copy attributes
+              Array.from(script.attributes).forEach(attr => {
+                newScript.setAttribute(attr.name, attr.value);
+              });
+              if (script.src) {
+                newScript.src = script.src;
+                newScript.async = true;
+              } else {
+                newScript.textContent = script.textContent;
+              }
+              newScript.id = 'supertour-visitor-tracking';
+              document.head.appendChild(newScript);
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load custom visitor tracking script from Supabase:', err);
+      }
+    };
+
+    fetchAndInjectScript();
+  }, []);
 
   useEffect(() => {
     const fullPath = location.pathname + location.search;
@@ -45,7 +88,16 @@ export const AnalyticsTracker: React.FC = () => {
       behavior: 'instant' as ScrollBehavior // Keep it instant so loading feels prompt and immediate
     });
 
+    // 5. Trigger standard location change events for SPA-aware tracking scripts
+    try {
+      window.dispatchEvent(new Event('popstate'));
+      window.dispatchEvent(new Event('locationchange'));
+    } catch (e) {
+      // Silently handle any browser dispatch errors
+    }
+
   }, [location]);
 
   return null; // This is a tracker component, it does not render visual UI
 };
+

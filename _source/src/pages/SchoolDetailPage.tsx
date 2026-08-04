@@ -18,6 +18,7 @@ export const SchoolDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [shareText, setShareText] = useState('Compartir');
   const [selectedSchoolIdx, setSelectedSchoolIdx] = useState(0);
+  const [bannerEnabled, setBannerEnabled] = useState(false);
 
   const activeSchoolItem = school?.school_items && school.school_items.length > 0
     ? (school.school_items[selectedSchoolIdx] || school.school_items[0])
@@ -27,6 +28,37 @@ export const SchoolDetailPage: React.FC = () => {
   const activePhotoWeb = activeSchoolItem?.group_photo_web || school?.group_photo_web || '';
   const activePhotoHd = activeSchoolItem?.group_photo_hd || school?.group_photo_hd || '';
   const activeVideo = activeSchoolItem?.multimedia_url || school?.multimedia_url || '';
+
+  const bannerUrl = school 
+    ? `https://fotos.dreamscda.com.ar/?source=supertourchannel.com.ar&utm_source=supertourchannel.com.ar&utm_medium=banner&colegio=${encodeURIComponent(activeSchoolName)}` 
+    : 'https://fotos.dreamscda.com.ar/?source=supertourchannel.com.ar&utm_source=supertourchannel.com.ar&utm_medium=banner';
+
+  const handleBannerClick = () => {
+    if (!school) return;
+    const wasClicked = localStorage.getItem('supertour_clicked_banner_event');
+    trackEvent({
+      event_type: 'banner_click',
+      school_id: school.id,
+      destination: school.destination,
+      metadata: {
+        is_unique: !wasClicked,
+        colegio: activeSchoolName
+      }
+    });
+    localStorage.setItem('supertour_clicked_banner_event', 'true');
+  };
+
+  const filteredPhotos = photos.filter(p => {
+    if (!p.url_web) return true;
+    try {
+      const url = new URL(p.url_web);
+      const sub = url.searchParams.get('sub');
+      if (!sub) return true;
+      return sub === activeSchoolName;
+    } catch {
+      return true;
+    }
+  });
 
   // Survey states
   const [activeSurvey, setActiveSurvey] = useState<any | null>(null);
@@ -161,6 +193,20 @@ export const SchoolDetailPage: React.FC = () => {
           } else {
             // Use mock photos if gallery is empty
             setPhotos(mockPhotos);
+          }
+
+          // 3. Fetch Sales Banner Setting
+          try {
+            const { data: bannerData } = await supabase
+              .from('supertour_settings')
+              .select('value')
+              .eq('key', 'show_sales_banner')
+              .maybeSingle();
+            if (bannerData) {
+              setBannerEnabled(bannerData.value === 'true');
+            }
+          } catch (bannerErr) {
+            console.warn('Could not load show_sales_banner setting:', bannerErr);
           }
         }
       } catch (err) {
@@ -437,6 +483,39 @@ export const SchoolDetailPage: React.FC = () => {
           </button>
         </div>
 
+        {/* Sales Promo Banner */}
+        {bannerEnabled && (
+          <div className="glass-card rounded-3xl border border-zinc-800/40 p-6 sm:p-8 bg-zinc-950/85 shadow-premium relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10 animate-fade-in select-none">
+            <div className="absolute top-0 right-0 h-32 w-32 bg-primary/5 blur-[80px] rounded-full pointer-events-none" />
+            
+            <div className="space-y-2 max-w-xl">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-[9px] font-black text-primary uppercase tracking-widest leading-none glow-yellow animate-pulse">
+                <Sparkles size={10} />
+                Oferta Exclusiva Egresados
+              </div>
+              <h3 className="text-lg font-black uppercase text-white tracking-tight leading-snug">
+                Adquirí tus fotos impresas y recuerdos del viaje
+              </h3>
+              <p className="text-[10px] sm:text-xs text-zinc-400 font-semibold uppercase leading-normal tracking-wide">
+                Accedé a nuestra tienda oficial para comprar fotos adicionales de alta calidad y otros productos personalizados de tu viaje de egresados.
+              </p>
+            </div>
+
+            <div className="flex-shrink-0">
+              <a
+                href={bannerUrl}
+                onClick={handleBannerClick}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-[1.03] glow-yellow shadow-md"
+              >
+                <Sparkles size={13} />
+                Ir a la Tienda
+              </a>
+            </div>
+          </div>
+        )}
+
         {/* School Header Information */}
         <div className="text-center md:text-left mb-12 select-none">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-zinc-900">
@@ -632,7 +711,7 @@ export const SchoolDetailPage: React.FC = () => {
             </p>
           </div>
 
-          <PremiumGallery photos={photos} schoolName={school.name} />
+          <PremiumGallery photos={filteredPhotos} schoolName={activeSchoolName} />
         </section>
       </main>
       <Footer />

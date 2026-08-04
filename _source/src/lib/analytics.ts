@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 
 export interface AnalyticsEvent {
   id?: string;
-  event_type: 'calendar_click' | 'school_view' | 'photo_click' | 'photo_download' | 'survey_vote';
+  event_type: 'calendar_click' | 'school_view' | 'photo_click' | 'photo_download' | 'survey_vote' | 'banner_click';
   school_id?: string;
   destination?: string;
   metadata?: any;

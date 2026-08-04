@@ -17,10 +17,11 @@ interface FileQueueItem {
 
 interface UploaderProps {
   schoolId: string;
+  subSchool?: string;
   onUploadComplete: () => void;
 }
 
-export const Uploader: React.FC<UploaderProps> = ({ schoolId, onUploadComplete }) => {
+export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, onUploadComplete }) => {
   const [queue, setQueue] = useState<FileQueueItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -168,12 +169,19 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, onUploadComplete }
         }
 
         // 3. Registrar Foto en la tabla 'gallery_photos'
+        const finalWebUrl = subSchool 
+          ? `${webUrl}?sub=${encodeURIComponent(subSchool)}` 
+          : webUrl;
+        const finalHdUrl = subSchool 
+          ? `${hdUrl}?sub=${encodeURIComponent(subSchool)}` 
+          : hdUrl;
+
         const { error: dbError } = await supabase
           .from('gallery_photos')
           .insert({
             school_id: schoolId,
-            url_web: webUrl,
-            url_hd: hdUrl,
+            url_web: finalWebUrl,
+            url_hd: finalHdUrl,
             category: item.category,
             sort_order: i + 1
           });

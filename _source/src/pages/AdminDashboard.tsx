@@ -119,6 +119,12 @@ export const AdminDashboard: React.FC = () => {
   const [webhookUrl, setWebhookUrl] = useState('');
   const [savingWebhook, setSavingWebhook] = useState(false);
 
+  // Sales Banner & Custom Script states
+  const [showSalesBanner, setShowSalesBanner] = useState(false);
+  const [visitorTrackingScript, setVisitorTrackingScript] = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [selectedSubSchool, setSelectedSubSchool] = useState('General');
+
   // Live Telemetry states
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[]>([]);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
@@ -259,27 +265,52 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Load webhook setting
-  const loadWebhookSetting = async () => {
+  // Load settings (Webhook, Banner, visitor tracking script)
+  const loadSettings = async () => {
     let loadedUrl = '';
+    let loadedBanner = false;
+    let loadedScript = '';
     try {
-      const { data, error } = await supabase
+      const { data: webhookData } = await supabase
         .from('supertour_settings')
         .select('value')
         .eq('key', 'n8n_webhook_url')
         .maybeSingle();
-      if (!error && data) {
-        loadedUrl = data.value;
+      if (webhookData) {
+        loadedUrl = webhookData.value;
+      }
+
+      const { data: bannerData } = await supabase
+        .from('supertour_settings')
+        .select('value')
+        .eq('key', 'show_sales_banner')
+        .maybeSingle();
+      if (bannerData) {
+        loadedBanner = bannerData.value === 'true';
+      }
+
+      const { data: scriptData } = await supabase
+        .from('supertour_settings')
+        .select('value')
+        .eq('key', 'visitor_tracking_script')
+        .maybeSingle();
+      if (scriptData) {
+        loadedScript = scriptData.value;
       }
     } catch (err) {
-      console.warn('Error loading webhook url setting from DB.');
+      console.warn('Error loading settings from DB.');
     }
 
     if (!loadedUrl) {
       loadedUrl = localStorage.getItem('supertour_webhook_url') || '';
     }
+    if (!loadedScript) {
+      loadedScript = localStorage.getItem('supertour_visitor_tracking_script') || '';
+    }
     
     setWebhookUrl(loadedUrl);
+    setShowSalesBanner(loadedBanner);
+    setVisitorTrackingScript(loadedScript);
   };
 
   useEffect(() => {
@@ -291,7 +322,7 @@ export const AdminDashboard: React.FC = () => {
     if (activeTab === 'metricas') {
       loadAnalytics();
     } else if (activeTab === 'encuestas') {
-      loadWebhookSetting();
+      loadSettings();
       loadAnalytics();
     }
   }, [activeTab]);
@@ -657,11 +688,51 @@ export const AdminDashboard: React.FC = () => {
         .upsert({ key: 'n8n_webhook_url', value: webhookUrl });
       if (error) throw error;
       setSuccessMsg('Webhook de n8n guardado y configurado en Supabase con éxito.');
+      toast.success('Webhook guardado con éxito.');
     } catch (err: any) {
       console.warn('Error al guardar el webhook en Supabase:', err);
       setSuccessMsg('[Modo Offline] Webhook configurado en caché de este navegador.');
     } finally {
       setSavingWebhook(false);
+    }
+  };
+
+  // Toggle Sales Banner setting
+  const handleToggleSalesBanner = async (checked: boolean) => {
+    setShowSalesBanner(checked);
+    try {
+      const { error } = await supabase
+        .from('supertour_settings')
+        .upsert({ key: 'show_sales_banner', value: checked ? 'true' : 'false' });
+      if (error) throw error;
+      toast.success(checked ? 'Banner de ventas activado con éxito.' : 'Banner de ventas desactivado.');
+    } catch (err: any) {
+      console.warn('Error al guardar show_sales_banner en Supabase:', err);
+      toast.error('Error al guardar la configuración en Supabase.');
+    }
+  };
+
+  // Save custom visitor tracking script
+  const handleSaveTrackingScript = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    localStorage.setItem('supertour_visitor_tracking_script', visitorTrackingScript);
+
+    try {
+      const { error } = await supabase
+        .from('supertour_settings')
+        .upsert({ key: 'visitor_tracking_script', value: visitorTrackingScript });
+      if (error) throw error;
+      setSuccessMsg('Script de Visitor Tracking guardado y configurado con éxito.');
+      toast.success('Script de seguimiento guardado con éxito.');
+    } catch (err: any) {
+      console.warn('Error al guardar el script de tracking en Supabase:', err);
+      setSuccessMsg('[Modo Offline] Script configurado en caché de este navegador.');
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -1140,6 +1211,11 @@ export const AdminDashboard: React.FC = () => {
     // Respuestas de encuesta
     const surveyVotesCount = analyticsEvents.filter(e => e.event_type === 'survey_vote').length;
 
+    // Clicks en el banner (Total y Únicos)
+    const bannerClickEvents = analyticsEvents.filter(e => e.event_type === 'banner_click');
+    const bannerClicksCount = bannerClickEvents.length;
+    const bannerUniqueClicksCount = bannerClickEvents.filter(e => e.metadata?.is_unique === true).length;
+
     return {
       totalViews,
       totalDownloads,
@@ -1156,7 +1232,9 @@ export const AdminDashboard: React.FC = () => {
       topSearchedCount,
       topPhotoClickSchool,
       topPhotoClickCount,
-      surveyVotesCount
+      surveyVotesCount,
+      bannerClicksCount,
+      bannerUniqueClicksCount
     };
   };
 
@@ -1255,61 +1333,126 @@ export const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Cargador Masivo */}
-            <div className="grid lg:grid-cols-12 gap-8 items-start">
-              <div className="lg:col-span-5">
-                <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-4">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-1.5 leading-none">
-                    <CloudUpload size={14} />
-                    Cargar Nuevas Fotos
-                  </h3>
-                  <p className="text-[10px] text-zinc-500 uppercase leading-relaxed font-semibold">
-                    Las fotos se procesarán de inmediato en tu navegador. La versión reducida (Web) y la versión original (HD) se subirán de forma directa a tu bucket de Backblaze B2.
-                  </p>
-                  <Uploader schoolId={viewingGallerySchool.id} onUploadComplete={() => loadSchoolPhotos(viewingGallerySchool.id)} />
-                </div>
-              </div>
+            {/* Define filtered photos for individual school groups in gallery */}
+            {(() => {
+              const filteredGalleryPhotos = galleryPhotos.filter(p => {
+                if (selectedSubSchool === 'General') return true;
+                if (!p.url_web) return true;
+                try {
+                  const url = new URL(p.url_web);
+                  const sub = url.searchParams.get('sub');
+                  return sub === selectedSubSchool;
+                } catch {
+                  return true;
+                }
+              });
 
-              {/* Grid de Fotos cargadas */}
-              <div className="lg:col-span-7">
-                <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-4.5">
-                  <div className="flex items-center justify-between pb-3.5 border-b border-zinc-900">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5 leading-none">
-                      <ImageIcon size={14} />
-                      Fotos Registradas ({galleryPhotos.length})
-                    </h3>
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                  <div className="lg:col-span-5">
+                    <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-4">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-1.5 leading-none">
+                        <CloudUpload size={14} />
+                        Cargar Nuevas Fotos
+                      </h3>
+                      <p className="text-[10px] text-zinc-500 uppercase leading-relaxed font-semibold">
+                        Las fotos se procesarán de inmediato en tu navegador. La versión reducida (Web) y la versión original (HD) se subirán de forma directa a tu bucket de Backblaze B2.
+                      </p>
+
+                      {/* Dropdown de Sub-colegios en lote */}
+                      {viewingGallerySchool.school_items && viewingGallerySchool.school_items.length > 1 && (
+                        <div className="space-y-1.5 p-3 rounded-xl bg-zinc-900 border border-zinc-800 select-none">
+                          <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block leading-none">
+                            Asociar fotos a un Colegio:
+                          </label>
+                          <select
+                            value={selectedSubSchool}
+                            onChange={(e) => setSelectedSubSchool(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-850 focus:border-primary/50 text-white text-[10px] font-bold focus:outline-none uppercase"
+                          >
+                            <option value="General">General (Todas las escuelas del grupo)</option>
+                            {viewingGallerySchool.school_items.map((sItem, idx) => (
+                              <option key={sItem.id || idx} value={sItem.name}>
+                                {sItem.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <Uploader
+                        schoolId={viewingGallerySchool.id}
+                        subSchool={selectedSubSchool !== 'General' ? selectedSubSchool : undefined}
+                        onUploadComplete={() => loadSchoolPhotos(viewingGallerySchool.id)}
+                      />
+                    </div>
                   </div>
 
-                  {loadingPhotos ? (
-                    <div className="text-center py-20 text-xs text-zinc-500 font-bold uppercase tracking-wider animate-pulse">Cargando fotos del colegio...</div>
-                  ) : galleryPhotos.length === 0 ? (
-                    <div className="text-center py-20 border border-dashed border-zinc-850 rounded-xl bg-zinc-900/10 text-zinc-600">
-                      <ImageIcon size={28} className="mx-auto text-zinc-800 mb-2 animate-bounce" />
-                      <p className="text-xs font-bold uppercase tracking-wider">No hay fotos en la galería de este colegio</p>
-                      <p className="text-[10px] uppercase mt-1">Utilizá el panel de la izquierda para subir las primeras fotos.</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[500px] overflow-y-auto pr-1 scrollbar-thin">
-                      {galleryPhotos.map((photo, idx) => (
-                        <div key={photo.id} className="group relative aspect-square rounded-xl overflow-hidden border border-zinc-850 bg-zinc-900/20">
-                          <img src={photo.url_web} alt="galería" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex flex-col justify-between p-2.5 transition-opacity">
-                            <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Foto #{idx + 1}</span>
-                            <button
-                              onClick={() => handleDeletePhoto(photo.id)}
-                              className="w-8 h-8 rounded-lg bg-red-950/80 hover:bg-red-650 border border-red-900 text-red-400 hover:text-white flex items-center justify-center transition-colors self-end mt-auto"
-                              title="Eliminar Foto"
+                  {/* Grid de Fotos cargadas */}
+                  <div className="lg:col-span-7">
+                    <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-4.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 border-b border-zinc-900 gap-3">
+                        <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5 leading-none">
+                          <ImageIcon size={14} />
+                          Fotos Registradas ({filteredGalleryPhotos.length})
+                        </h3>
+
+                        {/* Filtro rápido por colegio en lista */}
+                        {viewingGallerySchool.school_items && viewingGallerySchool.school_items.length > 1 && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[8px] font-black uppercase text-zinc-500 leading-none">Ver:</span>
+                            <select
+                              value={selectedSubSchool}
+                              onChange={(e) => setSelectedSubSchool(e.target.value)}
+                              className="px-2 py-1 rounded bg-zinc-900 border border-zinc-800 text-white text-[9px] focus:outline-none uppercase font-bold"
                             >
-                              <Trash2 size={13} />
-                            </button>
+                              <option value="General">Todas</option>
+                              {viewingGallerySchool.school_items.map((sItem, idx) => (
+                                <option key={sItem.id || idx} value={sItem.name}>
+                                  {sItem.name.substring(0, 18)}...
+                                </option>
+                              ))}
+                            </select>
                           </div>
+                        )}
+                      </div>
+
+                      {loadingPhotos ? (
+                        <div className="text-center py-20 text-xs text-zinc-500 font-bold uppercase tracking-wider animate-pulse">Cargando fotos del colegio...</div>
+                      ) : filteredGalleryPhotos.length === 0 ? (
+                        <div className="text-center py-20 border border-dashed border-zinc-850 rounded-xl bg-zinc-900/10 text-zinc-600">
+                          <ImageIcon size={28} className="mx-auto text-zinc-800 mb-2 animate-bounce" />
+                          <p className="text-xs font-bold uppercase tracking-wider">No hay fotos registradas</p>
+                          <p className="text-[10px] uppercase mt-1">
+                            {selectedSubSchool === 'General' 
+                              ? 'Utilizá el panel de la izquierda para subir fotos.' 
+                              : `No hay fotos subidas específicamente para "${selectedSubSchool}".`}
+                          </p>
                         </div>
-                      ))}
+                      ) : (
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[500px] overflow-y-auto pr-1 scrollbar-thin">
+                          {filteredGalleryPhotos.map((photo, idx) => (
+                            <div key={photo.id} className="group relative aspect-square rounded-xl overflow-hidden border border-zinc-850 bg-zinc-900/20">
+                              <img src={photo.url_web} alt="galería" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex flex-col justify-between p-2.5 transition-opacity">
+                                <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Foto #{idx + 1}</span>
+                                <button
+                                  onClick={() => handleDeletePhoto(photo.id)}
+                                  className="w-8 h-8 rounded-lg bg-red-950/80 hover:bg-red-650 border border-red-900 text-red-400 hover:text-white flex items-center justify-center transition-colors self-end mt-auto"
+                                  title="Eliminar Foto"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
           </div>
         ) : (
@@ -1616,6 +1759,72 @@ export const AdminDashboard: React.FC = () => {
                       >
                         {savingWebhook ? 'Guardando...' : 'Conectar Webhook'}
                       </button>
+                    </form>
+                  </div>
+                </div>
+
+                {/* SALES BANNER CONFIG CARD */}
+                <div className="bg-zinc-950/80 border border-zinc-850 p-5 rounded-2xl relative overflow-hidden group shadow-lg">
+                  <div className="absolute top-0 right-0 h-24 w-24 bg-primary/5 blur-xl pointer-events-none" />
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-black text-primary uppercase tracking-widest block leading-none">Ventas y Promociones</span>
+                      <h3 className="text-sm font-black uppercase text-white tracking-tight leading-none">Banner de Ventas de Fotos (Dreamscda)</h3>
+                      <p className="text-[10px] text-zinc-500 uppercase leading-relaxed font-semibold">
+                        Habilitá o deshabilitá el banner premium de redirección en las galerías públicas al instante.
+                      </p>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <span className={`text-[10px] font-black uppercase tracking-wider transition-colors ${showSalesBanner ? 'text-primary' : 'text-zinc-500'}`}>
+                        {showSalesBanner ? 'Activo (Mostrar)' : 'Inactivo (Ocultar)'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSalesBanner(!showSalesBanner)}
+                        className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 focus:outline-none ${
+                          showSalesBanner ? 'bg-primary' : 'bg-zinc-800'
+                        }`}
+                      >
+                        <div
+                          className={`w-4 h-4 rounded-full bg-black transition-transform duration-300 ${
+                            showSalesBanner ? 'translate-x-6' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* VISITOR TRACKING SCRIPT CARD */}
+                <div className="bg-zinc-950/80 border border-zinc-850 p-5 rounded-2xl relative overflow-hidden group shadow-lg">
+                  <div className="absolute top-0 right-0 h-24 w-24 bg-primary/5 blur-xl pointer-events-none" />
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-black text-primary uppercase tracking-widest block leading-none">Seguimiento Web Avanzado</span>
+                      <h3 className="text-sm font-black uppercase text-white tracking-tight leading-none">Script de Visitor Tracking / Analytics</h3>
+                      <p className="text-[10px] text-zinc-500 uppercase leading-relaxed font-semibold">
+                        Pegá tu fragmento de código de seguimiento completo (incluyendo etiquetas &lt;script&gt;) para inyectarlo en las páginas públicas.
+                      </p>
+                    </div>
+                    
+                    <form onSubmit={handleSaveTrackingScript} className="space-y-3">
+                      <textarea
+                        rows={4}
+                        value={visitorTrackingScript}
+                        onChange={(e) => setVisitorTrackingScript(e.target.value)}
+                        placeholder="<!-- Pegá aquí tu código de tracking de visitortracking.com o GA4 -->&#10;<script>...</script>"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white font-mono text-[10px] focus:outline-none"
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          type="submit"
+                          disabled={savingSettings}
+                          className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-[10px] uppercase tracking-wider transition-colors glow-yellow disabled:opacity-40"
+                        >
+                          {savingSettings ? 'Guardando Script...' : 'Guardar Script de Tracking'}
+                        </button>
+                      </div>
                     </form>
                   </div>
                 </div>
@@ -1932,8 +2141,8 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 ) : (
                   <>
-                    {/* Grid de 4 KPIs */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Grid de 6 KPIs */}
+                    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                       <div className="bg-zinc-950 border border-zinc-850 p-4.5 rounded-2xl shadow-lg relative overflow-hidden group">
                         <div className="absolute top-0 right-0 h-16 w-16 bg-primary/5 blur-xl pointer-events-none" />
                         <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block">Visitas Totales (Portal)</span>
@@ -1960,6 +2169,20 @@ export const AdminDashboard: React.FC = () => {
                         <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block">Colegios Activos</span>
                         <span className="text-2xl font-black text-primary block mt-2.5 leading-none font-outfit glow-text-yellow">{schools.length}</span>
                         <span className="text-[9px] text-zinc-500 font-bold block mt-3 uppercase tracking-wider">2 Destinos principales</span>
+                      </div>
+
+                      <div className="bg-zinc-950 border border-zinc-850 p-4.5 rounded-2xl shadow-lg relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 h-16 w-16 bg-primary/5 blur-xl pointer-events-none" />
+                        <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block">Clicks Banner (Total)</span>
+                        <span className="text-2xl font-black text-primary block mt-2.5 leading-none font-outfit glow-text-yellow">{vivo.bannerClicksCount || 0}</span>
+                        <span className="text-[9px] text-zinc-500 font-bold block mt-3 uppercase tracking-wider">Redirección Dreamscda</span>
+                      </div>
+
+                      <div className="bg-zinc-950 border border-zinc-850 p-4.5 rounded-2xl shadow-lg relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 h-16 w-16 bg-primary/5 blur-xl pointer-events-none" />
+                        <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block">Clicks Banner (Únicos)</span>
+                        <span className="text-2xl font-black text-primary block mt-2.5 leading-none font-outfit glow-text-yellow">{vivo.bannerUniqueClicksCount || 0}</span>
+                        <span className="text-[9px] text-zinc-500 font-bold block mt-3 uppercase tracking-wider">Pasajeros únicos</span>
                       </div>
                     </div>
 
