@@ -682,10 +682,10 @@ export const SchoolDetailPage: React.FC = () => {
                 Oferta Exclusiva Egresados
               </div>
               <h3 className="text-lg font-black uppercase text-white tracking-tight leading-snug">
-                Adquirí tus fotos impresas y recuerdos del viaje
+                Adquirí tus fotos digitales adicionales del viaje
               </h3>
               <p className="text-[10px] sm:text-xs text-zinc-400 font-semibold uppercase leading-normal tracking-wide">
-                Accedé a nuestra tienda oficial para comprar fotos adicionales de alta calidad y otros productos personalizados de tu viaje de egresados.
+                Accedé a nuestra tienda oficial para comprar fotos digitales adicionales a las incluidas en tu contrato y guardá todos los recuerdos de tu viaje.
               </p>
             </div>
 
