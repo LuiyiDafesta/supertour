@@ -213,8 +213,7 @@ export const SchoolDetailPage: React.FC = () => {
           if (photoData && photoData.length > 0) {
             setPhotos(photoData as GalleryPhoto[]);
           } else {
-            // Use mock photos if gallery is empty
-            setPhotos(mockPhotos);
+            setPhotos([]);
           }
         }
       } catch (err) {
