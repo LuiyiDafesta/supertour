@@ -2090,36 +2090,36 @@ export const AdminDashboard: React.FC = () => {
 
       {/* MODAL DE ALTA / EDICIÓN DE GRUPO DE VIAJE */}
       {showSchoolModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md transition-opacity">
           <div 
-            className="relative w-full max-w-lg border border-zinc-800 rounded-2xl bg-zinc-950 shadow-premium overflow-hidden transform transition-all flex flex-col max-h-[90vh]"
+            className="relative w-full max-w-2xl border border-zinc-800 rounded-3xl bg-zinc-950 shadow-2xl overflow-hidden transform transition-all flex flex-col max-h-[92vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header Modal */}
-            <div className="px-6 pt-5 pb-4 flex items-center justify-between border-b border-zinc-900 flex-shrink-0">
+            <div className="px-6 sm:px-8 pt-6 pb-5 flex items-center justify-between border-b border-zinc-900 flex-shrink-0">
               <div>
-                <h3 className="text-sm font-black uppercase text-white tracking-widest flex items-center gap-1.5 leading-none">
-                  <Sparkles size={14} className="text-primary" />
+                <h3 className="text-base sm:text-lg font-black uppercase text-white tracking-widest flex items-center gap-2 leading-none">
+                  <Sparkles size={16} className="text-primary" />
                   {editingSchool ? 'Editar Grupo de Viaje' : 'Nuevo Grupo de Viaje'}
                 </h3>
-                <p className="text-[10px] text-zinc-500 uppercase mt-1 leading-none">
+                <p className="text-xs text-zinc-400 uppercase mt-1.5 leading-none font-semibold">
                   {editingSchool ? 'Modificá la ficha y colegios integrantes de este grupo' : 'Registrá un grupo con sus colegios asociados para el calendario'}
                 </p>
               </div>
               <button 
                 onClick={closeSchoolModal}
-                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
 
-            {/* Formulario con scroll si es muy alto */}
-            <form onSubmit={handleSaveSchool} className="p-6 space-y-4 overflow-y-auto flex-1 scrollbar-thin">
+            {/* Formulario con scroll cómodo */}
+            <form onSubmit={handleSaveSchool} className="p-6 sm:p-8 space-y-6 overflow-y-auto flex-1 scrollbar-thin">
               
               {/* Campo 1: Número / Código de Grupo (Interno Admin) */}
-              <div className="bg-zinc-900/40 p-3.5 rounded-xl border border-zinc-850 space-y-1.5">
-                <label className="block text-[10px] font-black text-primary uppercase tracking-widest leading-none">
+              <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800 space-y-2">
+                <label className="block text-xs font-black text-primary uppercase tracking-widest leading-none">
                   Número / Código de Grupo (Uso Interno Admin)
                 </label>
                 <input
@@ -2127,56 +2127,56 @@ export const AdminDashboard: React.FC = () => {
                   value={groupCode}
                   onChange={(e) => setGroupCode(e.target.value)}
                   placeholder="Ej: 0001"
-                  className="w-full px-3 py-2.5 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-bold focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-sm font-bold focus:outline-none"
                 />
-                <span className="text-[8.5px] text-zinc-500 font-semibold uppercase block">
+                <span className="text-xs text-zinc-400 font-semibold uppercase block">
                   🔒 Identificador interno para administración. Los pasajeros no lo verán ni lo necesitan.
                 </span>
               </div>
 
               {/* Campo 2: Dinámica de Colegios Integrantes y sus Archivos */}
-              <div className="space-y-3 pt-1">
-                <div className="flex justify-between items-center">
+              <div className="space-y-4 pt-1">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
-                    <label className="block text-[10px] font-black text-zinc-200 uppercase tracking-widest leading-none">
-                      Colegios Integrantes ({schoolItems.length})
+                    <label className="block text-xs font-black text-zinc-100 uppercase tracking-widest leading-none">
+                      Colegios Integrantes del Grupo ({schoolItems.length})
                     </label>
-                    <span className="text-[8.5px] text-zinc-500 font-semibold uppercase block mt-1">
+                    <span className="text-xs text-zinc-400 font-bold uppercase block mt-1">
                       Cada colegio posee su foto grupal y video propio. La galería es común a todo el grupo.
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={handleAddSchoolItem}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-[9px] font-black uppercase tracking-wider transition-colors flex-shrink-0"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary text-xs font-black uppercase tracking-wider transition-colors flex-shrink-0"
                   >
-                    <Plus size={12} />
+                    <Plus size={14} />
                     Agregar Colegio
                   </button>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {schoolItems.map((item, idx) => (
-                    <div key={item.id || `si-${idx}`} className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/30 space-y-3 relative group">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black text-primary uppercase tracking-widest flex items-center gap-1">
-                          <Sparkles size={11} /> Colegio #{idx + 1}
+                    <div key={item.id || `si-${idx}`} className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/40 space-y-4 relative group">
+                      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+                        <span className="text-xs font-black text-primary uppercase tracking-widest flex items-center gap-1.5">
+                          <Sparkles size={13} /> Colegio #{idx + 1}
                         </span>
                         {schoolItems.length > 1 && (
                           <button
                             type="button"
                             onClick={() => handleRemoveSchoolItem(idx)}
-                            className="p-1 rounded-lg bg-zinc-900 hover:bg-red-950/60 text-zinc-500 hover:text-red-400 border border-zinc-800 transition-colors"
+                            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/60 text-zinc-400 hover:text-red-400 border border-zinc-800 transition-colors"
                             title="Eliminar este colegio"
                           >
-                            <Trash2 size={13} />
+                            <Trash2 size={15} />
                           </button>
                         )}
                       </div>
 
                       {/* Nombre del Colegio */}
                       <div>
-                        <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
+                        <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-1.5">
                           Nombre del Colegio *
                         </label>
                         <input
@@ -2185,27 +2185,27 @@ export const AdminDashboard: React.FC = () => {
                           value={item.name}
                           onChange={(e) => handleUpdateSchoolItem(idx, 'name', e.target.value)}
                           placeholder={`Ej: ${idx === 0 ? 'EGB Colegio San Martín' : 'Instituto Belgrano'}`}
-                          className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none"
+                          className="w-full px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-sm font-bold focus:outline-none"
                         />
                       </div>
 
                       {/* Foto Grupal Oficial de este Colegio */}
-                      <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-850 space-y-2">
+                      <div className="p-4 bg-zinc-950/80 rounded-2xl border border-zinc-850 space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-black text-zinc-300 uppercase tracking-wider flex items-center gap-1">
-                            <ImageIcon size={11} className="text-primary" /> Foto Grupal Oficial (HD)
+                          <span className="text-xs font-black text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                            <ImageIcon size={13} className="text-primary" /> Foto Grupal Oficial (HD)
                           </span>
                           {item.group_photo_web && (
-                            <span className="text-[8px] text-emerald-400 font-bold uppercase flex items-center gap-1">
-                              <Check size={10} /> Foto Cargada
+                            <span className="text-xs text-emerald-400 font-black uppercase flex items-center gap-1">
+                              <Check size={12} /> Foto Cargada
                             </span>
                           )}
                         </div>
 
                         <div className="flex items-center gap-3">
-                          <label className="flex-1 py-2 px-3 rounded-lg border border-dashed border-zinc-750 hover:border-primary/40 bg-zinc-900/40 hover:bg-zinc-900 cursor-pointer text-center transition-all">
-                            <span className="text-[9.5px] font-bold text-zinc-300 uppercase block">
-                              {item.group_photo_web ? '📁 Cambiar Foto Grupal' : '☁️ Seleccionar Foto Grupal'}
+                          <label className="flex-1 py-3 px-4 rounded-xl border border-dashed border-zinc-700 hover:border-primary/50 bg-zinc-900/40 hover:bg-zinc-900 cursor-pointer text-center transition-all">
+                            <span className="text-xs font-black text-zinc-200 uppercase block">
+                              {item.group_photo_web ? '📁 Cambiar Foto Grupal HD' : '☁️ Seleccionar Foto Grupal HD'}
                             </span>
                             <input
                               type="file"
@@ -2216,7 +2216,7 @@ export const AdminDashboard: React.FC = () => {
                           </label>
 
                           {item.group_photo_web && (
-                            <div className="w-12 h-12 rounded-lg border border-zinc-800 overflow-hidden bg-zinc-950 relative group/img flex-shrink-0">
+                            <div className="w-14 h-14 rounded-xl border border-zinc-800 overflow-hidden bg-zinc-950 relative group/img flex-shrink-0">
                               <img src={item.group_photo_web} alt={item.name} className="w-full h-full object-cover" />
                               <button
                                 type="button"
@@ -2226,7 +2226,7 @@ export const AdminDashboard: React.FC = () => {
                                 }}
                                 className="absolute inset-0 bg-black/80 opacity-0 group-hover/img:opacity-100 flex items-center justify-center text-red-400 transition-opacity"
                               >
-                                <Trash2 size={13} />
+                                <Trash2 size={15} />
                               </button>
                             </div>
                           )}
@@ -2234,21 +2234,21 @@ export const AdminDashboard: React.FC = () => {
                       </div>
 
                       {/* Video / Archivo Zip de este Colegio */}
-                      <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-850 space-y-2">
+                      <div className="p-4 bg-zinc-950/80 rounded-2xl border border-zinc-850 space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-black text-zinc-300 uppercase tracking-wider flex items-center gap-1">
-                            <Film size={11} className="text-primary" /> Video / Archivo Zip (Opcional)
+                          <span className="text-xs font-black text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                            <Film size={13} className="text-primary" /> Video / Archivo Zip (Opcional)
                           </span>
                           {item.multimedia_url && (
-                            <span className="text-[8px] text-emerald-400 font-bold uppercase flex items-center gap-1">
-                              <Check size={10} /> Video Cargado
+                            <span className="text-xs text-emerald-400 font-black uppercase flex items-center gap-1">
+                              <Check size={12} /> Video Cargado
                             </span>
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2">
-                          <label className="flex-1 py-2 px-3 rounded-lg border border-dashed border-zinc-750 hover:border-primary/40 bg-zinc-900/40 hover:bg-zinc-900 cursor-pointer text-center transition-all">
-                            <span className="text-[9.5px] font-bold text-zinc-300 uppercase block truncate">
+                        <div className="flex items-center gap-3">
+                          <label className="flex-1 py-3 px-4 rounded-xl border border-dashed border-zinc-700 hover:border-primary/50 bg-zinc-900/40 hover:bg-zinc-900 cursor-pointer text-center transition-all">
+                            <span className="text-xs font-black text-zinc-200 uppercase block truncate">
                               {item.multimedia_url ? '📁 Cambiar Video/Zip' : '🎥 Seleccionar Video/Zip'}
                             </span>
                             <input
@@ -2263,10 +2263,10 @@ export const AdminDashboard: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => handleUpdateSchoolItem(idx, 'multimedia_url', '')}
-                              className="p-2 rounded-lg bg-zinc-900 hover:bg-red-950/50 border border-zinc-800 text-zinc-400 hover:text-red-400 transition-colors flex-shrink-0"
+                              className="p-3 rounded-xl bg-zinc-900 hover:bg-red-950/50 border border-zinc-800 text-zinc-400 hover:text-red-400 transition-colors flex-shrink-0"
                               title="Remover Video"
                             >
-                              <Trash2 size={13} />
+                              <Trash2 size={15} />
                             </button>
                           )}
                         </div>
@@ -2275,8 +2275,8 @@ export const AdminDashboard: React.FC = () => {
                           type="url"
                           value={item.multimedia_url || ''}
                           onChange={(e) => handleUpdateSchoolItem(idx, 'multimedia_url', e.target.value)}
-                          placeholder="https://backblaze.com/video.zip (Enlace Manual)"
-                          className="w-full px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-[9.5px] font-mono focus:outline-none"
+                          placeholder="https://backblaze.com/video.zip (Enlace Manual Directo)"
+                          className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-mono focus:outline-none"
                         />
                       </div>
                     </div>
@@ -2284,15 +2284,15 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                 <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
-                    Destino
+                  <label className="block text-xs font-bold text-zinc-300 uppercase tracking-widest mb-1.5">
+                    Destino del Viaje
                   </label>
                   <select
                     value={destination}
                     onChange={(e) => setDestination(e.target.value as any)}
-                    className="w-full px-3.5 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs font-bold focus:outline-none focus:border-primary"
+                    className="w-full px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-sm font-bold focus:outline-none focus:border-primary"
                   >
                     <option value="Mar del Plata">Mar del Plata</option>
                     <option value="Villa Carlos Paz">Villa Carlos Paz</option>
@@ -2300,7 +2300,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">
+                  <label className="block text-xs font-bold text-zinc-300 uppercase tracking-widest mb-1.5">
                     Fecha de Viaje (Almanaque)
                   </label>
                   <input
@@ -2308,25 +2308,25 @@ export const AdminDashboard: React.FC = () => {
                     required
                     value={travelDate}
                     onChange={(e) => setTravelDate(e.target.value)}
-                    className="w-full px-3.5 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs font-bold focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-sm font-bold focus:outline-none"
                   />
                 </div>
               </div>
 
               {/* Botones de acción modal */}
-              <div className="flex justify-end gap-3 pt-3 border-t border-zinc-900 select-none flex-shrink-0">
+              <div className="flex justify-end gap-3 pt-4 border-t border-zinc-900 select-none flex-shrink-0">
                 <button
                   type="button"
                   onClick={closeSchoolModal}
-                  className="px-5 py-3 rounded-xl border border-zinc-800 bg-zinc-950 hover:bg-zinc-900 text-xs font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors"
+                  className="px-6 py-3.5 rounded-xl border border-zinc-800 bg-zinc-950 hover:bg-zinc-900 text-xs font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-3 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-colors glow-yellow"
+                  className="px-7 py-3.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-colors glow-yellow"
                 >
-                  {editingSchool ? 'Guardar Cambios' : 'Registrar'}
+                  {editingSchool ? 'Guardar Cambios' : 'Registrar Grupo'}
                 </button>
               </div>
             </form>
