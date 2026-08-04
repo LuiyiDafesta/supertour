@@ -75,7 +75,7 @@ export const Footer: React.FC = () => {
   };
 
   return (
-    <footer className="bg-black pt-16 pb-8 border-t border-zinc-900 select-none font-sans relative z-20">
+    <footer className="bg-black pt-16 pb-28 md:pb-8 border-t border-zinc-900 select-none font-sans relative z-20">
       {/* Symmetrical glowing background radial light */}
       <div className="absolute bottom-1/3 left-1/2 -translate-x-1/2 w-[500px] h-[300px] rounded-full bg-primary/5 blur-[120px] pointer-events-none" />
 
