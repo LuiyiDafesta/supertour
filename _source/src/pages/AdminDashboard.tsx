@@ -36,7 +36,11 @@ import {
   Star,
   Link as LinkIcon,
   ExternalLink,
-  ZoomIn
+  ZoomIn,
+  Copy,
+  RotateCcw,
+  AlertCircle,
+  Upload
 } from 'lucide-react';
 import { useSEO } from '../hooks/useSEO';
 import { compressImage } from '../lib/imageCompressor';
@@ -93,6 +97,17 @@ export const AdminDashboard: React.FC = () => {
   const [showAddVideoUrl, setShowAddVideoUrl] = useState(false);
   const [newVideoTitle, setNewVideoTitle] = useState('');
   const [newVideoUrl, setNewVideoUrl] = useState('');
+
+  // Copy to clipboard state
+  const [copiedGroupCodeId, setCopiedGroupCodeId] = useState<string | null>(null);
+
+  // Group Photos Drag & Drop and Queue State
+  const [groupPhotosDragActive, setGroupPhotosDragActive] = useState(false);
+  const [failedGroupPhotoFiles, setFailedGroupPhotoFiles] = useState<{ file: File; name: string; error: string }[]>([]);
+
+  // Videos Drag & Drop and Queue State
+  const [videosDragActive, setVideosDragActive] = useState(false);
+  const [failedVideoFiles, setFailedVideoFiles] = useState<{ file: File; name: string; error: string }[]>([]);
 
   // Tab Selector State
   const [activeTab, setActiveTab] = useState<'colegios' | 'encuestas' | 'metricas'>('colegios');
@@ -515,25 +530,56 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  // --- GESTIÓN DE FOTOS GRUPALES (NIVEL GRUPO) ---
-  const handleUploadGroupPhotos = async (files: FileList | null) => {
+  // --- COPIAR CÓDIGO DE GRUPO PARA WHATSAPP ---
+  const handleCopyGroupCode = (e: React.MouseEvent, school: School) => {
+    e.stopPropagation();
+    const code = school.group_code ? school.group_code.trim() : '';
+    if (!code) {
+      toast.info('Este grupo no posee un código asignado aún.');
+      return;
+    }
+    
+    // Copiar código al portapapeles
+    navigator.clipboard.writeText(code);
+    setCopiedGroupCodeId(school.id);
+    toast.success(`¡Código "${code}" copiado para enviar por WhatsApp!`);
+    
+    setTimeout(() => {
+      setCopiedGroupCodeId(null);
+    }, 2000);
+  };
+
+  const handleUploadGroupPhotos = (files: FileList | null) => {
     if (!files || files.length === 0 || !viewingGallerySchool) return;
+    const filesArray = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (filesArray.length > 0) {
+      processGroupPhotosQueue(filesArray);
+    } else {
+      toast.error('Por favor seleccioná únicamente archivos de imagen (JPG, PNG, WEBP).');
+    }
+  };
+
+  // --- GESTIÓN DE FOTOS GRUPALES EN COLA CON REINTENTOS (NIVEL GRUPO) ---
+  const processGroupPhotosQueue = async (filesToProcess: File[]) => {
+    if (!filesToProcess || filesToProcess.length === 0 || !viewingGallerySchool) return;
 
     setGroupPhotoUploading(true);
     setGroupPhotoProgress(5);
-    setGroupPhotoStatus('Iniciando subida...');
+    setGroupPhotoStatus('Iniciando subida de fotos en cola...');
     setErrorMsg(null);
+    setFailedGroupPhotoFiles([]);
 
-    const totalFiles = files.length;
+    const totalFiles = filesToProcess.length;
     let completedCount = 0;
     const uploadedPhotos: GalleryPhoto[] = [];
+    const failedList: { file: File; name: string; error: string }[] = [];
 
-    try {
-      for (let i = 0; i < totalFiles; i++) {
-        const file = files[i];
-        setGroupPhotoStatus(`Procesando foto grupal ${i + 1} de ${totalFiles}...`);
-        
-        // 1. Comprimir en cliente a resolución HD para web
+    for (let i = 0; i < totalFiles; i++) {
+      const file = filesToProcess[i];
+      setGroupPhotoStatus(`Procesando foto ${i + 1} de ${totalFiles}: ${file.name}`);
+
+      try {
+        // 1. Comprimir en cliente a resolución HD optimizada para web
         const compressed = await compressImage(file, 1600, 0.82);
         const timestamp = Date.now();
         const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
@@ -544,35 +590,37 @@ export const AdminDashboard: React.FC = () => {
         let hdUrl = '';
 
         try {
-          // Subir versión Web comprimida
+          // Subir versión Web comprimida a upload.php
           const formDataWeb = new FormData();
           formDataWeb.append('file', compressed);
           formDataWeb.append('filename', remotePathWeb);
           const resWeb = await fetch('/upload.php', { method: 'POST', body: formDataWeb });
           const dataWeb = await resWeb.json();
+          if (!dataWeb.success) throw new Error(dataWeb.error || 'Fallo de subida versión web');
           webUrl = toCdnUrl(dataWeb.url);
 
-          // Subir versión HD original
+          // Subir versión HD original a upload.php
           const formDataHd = new FormData();
           formDataHd.append('file', file);
           formDataHd.append('filename', remotePathHd);
           const resHd = await fetch('/upload.php', { method: 'POST', body: formDataHd });
           const dataHd = await resHd.json();
+          if (!dataHd.success) throw new Error(dataHd.error || 'Fallo de subida versión HD');
           hdUrl = toCdnUrl(dataHd.url);
-        } catch (uploadErr) {
-          console.warn('Subida real falló, usando simulación offline:', uploadErr);
+        } catch (uploadErr: any) {
+          console.warn('Subida real falló, utilizando respaldo offline:', uploadErr);
           webUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&sig=${timestamp}-${i}`;
           hdUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1600&sig=${timestamp}-${i}`;
         }
 
-        // 2. Guardar en Supabase gallery_photos con categoría 'Grupal'
+        // 2. Registrar en Supabase gallery_photos con categoría 'Grupal' y URLs CDN
         try {
           const { data, error } = await supabase
             .from('gallery_photos')
             .insert({
               school_id: viewingGallerySchool.id,
-              url_web: webUrl,
-              url_hd: hdUrl,
+              url_web: toCdnUrl(webUrl),
+              url_hd: toCdnUrl(hdUrl),
               category: 'Grupal',
               sort_order: i + 1
             })
@@ -585,8 +633,8 @@ export const AdminDashboard: React.FC = () => {
             uploadedPhotos.push({
               id: `gp-offline-${Date.now()}-${i}`,
               school_id: viewingGallerySchool.id,
-              url_web: webUrl,
-              url_hd: hdUrl,
+              url_web: toCdnUrl(webUrl),
+              url_hd: toCdnUrl(hdUrl),
               category: 'Grupal',
               sort_order: i + 1
             });
@@ -595,46 +643,77 @@ export const AdminDashboard: React.FC = () => {
           uploadedPhotos.push({
             id: `gp-offline-${Date.now()}-${i}`,
             school_id: viewingGallerySchool.id,
-            url_web: webUrl,
-            url_hd: hdUrl,
+            url_web: toCdnUrl(webUrl),
+            url_hd: toCdnUrl(hdUrl),
             category: 'Grupal',
             sort_order: i + 1
           });
         }
 
         completedCount++;
-        setGroupPhotoProgress(Math.round((completedCount / totalFiles) * 90));
+        setGroupPhotoProgress(Math.round((completedCount / totalFiles) * 100));
+      } catch (fileErr: any) {
+        console.error(`Error procesando foto ${file.name}:`, fileErr);
+        failedList.push({ file, name: file.name, error: fileErr.message || 'Error desconocido' });
       }
+    }
 
-      // Si el grupo no tiene una portada o la que tiene es genérica de unsplash, establecer la primera
-      const firstPhoto = uploadedPhotos[0];
-      if (firstPhoto && (!viewingGallerySchool.group_photo_web || viewingGallerySchool.group_photo_web.includes('unsplash.com'))) {
-        try {
-          await supabase.from('schools').update({
-            group_photo_web: firstPhoto.url_web,
-            group_photo_hd: firstPhoto.url_hd
-          }).eq('id', viewingGallerySchool.id);
-        } catch (e) {
-          console.warn('Could not update primary cover in DB:', e);
-        }
-        setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: firstPhoto.url_web, group_photo_hd: firstPhoto.url_hd } : null);
-        setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: firstPhoto.url_web, group_photo_hd: firstPhoto.url_hd } : s));
+    // Si el grupo no tiene una portada o la que tiene es genérica, asignar la primera
+    const firstPhoto = uploadedPhotos[0];
+    if (firstPhoto && (!viewingGallerySchool.group_photo_web || viewingGallerySchool.group_photo_web.includes('unsplash.com'))) {
+      try {
+        await supabase.from('schools').update({
+          group_photo_web: firstPhoto.url_web,
+          group_photo_hd: firstPhoto.url_hd
+        }).eq('id', viewingGallerySchool.id);
+      } catch (e) {
+        console.warn('Could not update primary cover in DB:', e);
       }
+      setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: firstPhoto.url_web, group_photo_hd: firstPhoto.url_hd } : null);
+      setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: firstPhoto.url_web, group_photo_hd: firstPhoto.url_hd } : s));
+    }
 
-      setGroupPhotoProgress(100);
-      setGroupPhotoStatus('¡Fotos cargadas con éxito! ✅');
+    if (uploadedPhotos.length > 0) {
       setGalleryPhotos(prev => [...uploadedPhotos, ...prev]);
-      toast.success(`${uploadedPhotos.length} foto(s) grupal(es) agregada(s) correctamente.`);
-    } catch (err: any) {
-      console.error('Error al subir fotos grupales:', err);
-      setErrorMsg(err.message || 'Error al subir fotos grupales');
-      toast.error('Ocurrió un error al subir las fotos grupales.');
-    } finally {
-      setTimeout(() => {
-        setGroupPhotoUploading(false);
-        setGroupPhotoProgress(0);
-        setGroupPhotoStatus(null);
-      }, 1500);
+    }
+
+    if (failedList.length > 0) {
+      setFailedGroupPhotoFiles(failedList);
+      toast.error(`${failedList.length} foto(s) fallaron durante la subida. Podés reintentarlas al pie de la sección.`);
+    } else {
+      toast.success(`${uploadedPhotos.length} foto(s) grupal(es) subida(s) con éxito en orden.`);
+    }
+
+    setGroupPhotoUploading(false);
+    setGroupPhotoProgress(0);
+    setGroupPhotoStatus(null);
+  };
+
+  const handleRetryFailedGroupPhotos = () => {
+    const filesToRetry = failedGroupPhotoFiles.map(f => f.file);
+    processGroupPhotosQueue(filesToRetry);
+  };
+
+  const handleGroupPhotosDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setGroupPhotosDragActive(true);
+  };
+
+  const handleGroupPhotosDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setGroupPhotosDragActive(false);
+  };
+
+  const handleGroupPhotosDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setGroupPhotosDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const filesArray = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+      if (filesArray.length > 0) {
+        processGroupPhotosQueue(filesArray);
+      } else {
+        toast.error('Por favor arrastrá únicamente archivos de imagen (JPG, PNG, WEBP).');
+      }
     }
   };
 
@@ -642,8 +721,8 @@ export const AdminDashboard: React.FC = () => {
     if (!viewingGallerySchool) return;
     try {
       const { error } = await supabase.from('schools').update({
-        group_photo_web: photo.url_web,
-        group_photo_hd: photo.url_hd
+        group_photo_web: toCdnUrl(photo.url_web),
+        group_photo_hd: toCdnUrl(photo.url_hd)
       }).eq('id', viewingGallerySchool.id);
       if (error) throw error;
       toast.success('Foto establecida como Portada Oficial del Grupo.');
@@ -651,8 +730,8 @@ export const AdminDashboard: React.FC = () => {
       console.warn('DB update cover failed, updating locally:', err);
       toast.success('[Modo Offline] Foto definida como portada localmente.');
     }
-    setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: photo.url_web, group_photo_hd: photo.url_hd } : null);
-    setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: photo.url_web, group_photo_hd: photo.url_hd } : s));
+    setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: toCdnUrl(photo.url_web), group_photo_hd: toCdnUrl(photo.url_hd) } : null);
+    setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: toCdnUrl(photo.url_web), group_photo_hd: toCdnUrl(photo.url_hd) } : s));
   };
 
   const handleDeleteGroupPhoto = async (photo: GalleryPhoto) => {
@@ -680,49 +759,63 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  // --- GESTIÓN DE VIDEOS (NIVEL GRUPO) ---
-  const handleUploadGroupVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !viewingGallerySchool) return;
+  // --- GESTIÓN DE VIDEOS EN COLA CON REINTENTOS (NIVEL GRUPO) ---
+  const processVideosQueue = async (filesToProcess: File[]) => {
+    if (!filesToProcess || filesToProcess.length === 0 || !viewingGallerySchool) return;
 
     setVideoUploading(true);
-    setVideoProgress(15);
-    setVideoStatus('Preparando archivo multimedia...');
+    setVideoProgress(5);
+    setVideoStatus('Iniciando subida de videos en orden...');
     setErrorMsg(null);
+    setFailedVideoFiles([]);
 
-    try {
-      const timestamp = Date.now();
-      const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
-      const remotePath = `multimedia/${timestamp}-${cleanName}`;
+    const totalVideos = filesToProcess.length;
+    let completedCount = 0;
+    const uploadedVideos: GroupVideo[] = [];
+    const failedList: { file: File; name: string; error: string }[] = [];
 
-      setVideoProgress(35);
-      setVideoStatus(`Subiendo ${file.name}...`);
+    for (let i = 0; i < totalVideos; i++) {
+      const file = filesToProcess[i];
+      setVideoStatus(`Subiendo video ${i + 1} de ${totalVideos}: ${file.name}`);
 
-      let videoUrl = '';
       try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('filename', remotePath);
-        const res = await fetch('/upload.php', { method: 'POST', body: formData });
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error || 'Error al subir video');
-        videoUrl = toCdnUrl(data.url);
-      } catch (uploadErr) {
-        console.warn('Upload error, using fallback:', uploadErr);
-        videoUrl = `https://demo.backblaze.com/download/viaje-${timestamp}.zip`;
+        const timestamp = Date.now();
+        const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+        const remotePath = `multimedia/${timestamp}-${cleanName}`;
+
+        let videoUrl = '';
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('filename', remotePath);
+          const res = await fetch('/upload.php', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (!data.success) throw new Error(data.error || 'Error al subir video');
+          videoUrl = toCdnUrl(data.url);
+        } catch (uploadErr: any) {
+          console.warn('Upload error, using fallback:', uploadErr);
+          videoUrl = `https://demo.backblaze.com/download/viaje-${timestamp}.zip`;
+        }
+
+        const newVid: GroupVideo = {
+          id: `vid-${timestamp}-${i}`,
+          title: file.name.replace(/\.[^/.]+$/, ""),
+          url: toCdnUrl(videoUrl),
+          created_at: new Date().toISOString()
+        };
+        uploadedVideos.push(newVid);
+
+        completedCount++;
+        setVideoProgress(Math.round((completedCount / totalVideos) * 100));
+      } catch (vidErr: any) {
+        console.error(`Error al subir video ${file.name}:`, vidErr);
+        failedList.push({ file, name: file.name, error: vidErr.message || 'Error en subida' });
       }
+    }
 
-      setVideoProgress(85);
-      setVideoStatus('Guardando en el grupo...');
-
+    if (uploadedVideos.length > 0) {
       const currentVideos = getSchoolVideos(viewingGallerySchool);
-      const newVid: GroupVideo = {
-        id: `vid-${timestamp}`,
-        title: file.name.replace(/\.[^/.]+$/, ""),
-        url: videoUrl,
-        created_at: new Date().toISOString()
-      };
-      const updatedVideos = [...currentVideos, newVid];
+      const updatedVideos = [...currentVideos, ...uploadedVideos];
 
       try {
         await supabase.from('schools').update({
@@ -735,19 +828,47 @@ export const AdminDashboard: React.FC = () => {
 
       setViewingGallerySchool(prev => prev ? { ...prev, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : null);
       setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : s));
-      
-      setVideoProgress(100);
-      setVideoStatus('¡Video cargado con éxito! ✅');
-      toast.success('Video / archivo multimedia agregado con éxito al grupo.');
-    } catch (err: any) {
-      console.error('Error al subir video:', err);
-      toast.error('Ocurrió un error al subir el video.');
-    } finally {
-      setTimeout(() => {
-        setVideoUploading(false);
-        setVideoProgress(0);
-        setVideoStatus(null);
-      }, 1500);
+    }
+
+    if (failedList.length > 0) {
+      setFailedVideoFiles(failedList);
+      toast.error(`${failedList.length} video(s) no pudieron subirse. Podés reintentarlos al pie de la sección.`);
+    } else {
+      toast.success(`${uploadedVideos.length} video(s) cargado(s) con éxito en orden.`);
+    }
+
+    setVideoUploading(false);
+    setVideoProgress(0);
+    setVideoStatus(null);
+  };
+
+  const handleRetryFailedVideos = () => {
+    const filesToRetry = failedVideoFiles.map(f => f.file);
+    processVideosQueue(filesToRetry);
+  };
+
+  const handleVideosDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setVideosDragActive(true);
+  };
+
+  const handleVideosDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setVideosDragActive(false);
+  };
+
+  const handleVideosDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setVideosDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const filesArray = Array.from(e.dataTransfer.files);
+      processVideosQueue(filesArray);
+    }
+  };
+
+  const handleUploadGroupVideo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      processVideosQueue(Array.from(e.target.files));
       e.target.value = '';
     }
   };
@@ -1770,6 +1891,70 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                     )}
 
+                    {/* Zona Drag & Drop para Fotos Grupales */}
+                    <div
+                      onDragOver={handleGroupPhotosDragOver}
+                      onDragLeave={handleGroupPhotosDragLeave}
+                      onDrop={handleGroupPhotosDrop}
+                      className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${
+                        groupPhotosDragActive
+                          ? 'border-primary bg-primary/10 scale-[1.01]'
+                          : 'border-zinc-800 hover:border-zinc-700 bg-zinc-900/20'
+                      }`}
+                      onClick={() => document.getElementById('group-photos-drop-input')?.click()}
+                    >
+                      <input
+                        id="group-photos-drop-input"
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        disabled={groupPhotoUploading}
+                        onChange={(e) => {
+                          handleUploadGroupPhotos(e.target.files);
+                          e.target.value = '';
+                        }}
+                        className="hidden"
+                      />
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <div className={`p-3 rounded-full ${groupPhotosDragActive ? 'bg-primary text-black' : 'bg-zinc-900 text-primary border border-zinc-800'}`}>
+                          <Upload size={22} className={groupPhotosDragActive ? 'animate-bounce' : ''} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-wider text-white">
+                            Arrastrá y soltá fotos grupales aquí
+                          </p>
+                          <p className="text-[10px] text-zinc-400 font-medium uppercase mt-0.5">
+                            O haz clic para seleccionar varios archivos JPG, PNG o WEBP (procesamiento en cola secuencial)
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Alerta de fotos grupales fallidas con botón de reintento */}
+                    {failedGroupPhotoFiles.length > 0 && !groupPhotoUploading && (
+                      <div className="p-4 rounded-2xl bg-red-950/40 border border-red-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+                        <div className="flex items-center gap-2.5">
+                          <AlertCircle size={18} className="text-red-400 flex-shrink-0" />
+                          <div>
+                            <p className="text-xs font-bold text-red-300">
+                              {failedGroupPhotoFiles.length} foto(s) grupal(es) no pudieron completarse en esta vuelta
+                            </p>
+                            <p className="text-[10px] text-red-400/80">
+                              {failedGroupPhotoFiles.map(f => f.name).join(', ')}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRetryFailedGroupPhotos}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-900/80 hover:bg-red-800 text-white font-black text-xs uppercase tracking-wider transition-colors flex-shrink-0"
+                        >
+                          <RotateCcw size={13} />
+                          Reintentar fotos fallidas
+                        </button>
+                      </div>
+                    )}
+
                     {/* Grilla de Fotos Grupales */}
                     {groupPhotos.length === 0 ? (
                       <div className="text-center py-12 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-500 space-y-2">
@@ -1980,6 +2165,67 @@ export const AdminDashboard: React.FC = () => {
                             style={{ width: `${videoProgress}%` }}
                           />
                         </div>
+                      </div>
+                    )}
+
+                    {/* Zona Drag & Drop para Videos del Grupo */}
+                    <div
+                      onDragOver={handleVideosDragOver}
+                      onDragLeave={handleVideosDragLeave}
+                      onDrop={handleVideosDrop}
+                      className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${
+                        videosDragActive
+                          ? 'border-primary bg-primary/10 scale-[1.01]'
+                          : 'border-zinc-800 hover:border-zinc-700 bg-zinc-900/20'
+                      }`}
+                      onClick={() => document.getElementById('group-videos-drop-input')?.click()}
+                    >
+                      <input
+                        id="group-videos-drop-input"
+                        type="file"
+                        multiple
+                        accept="video/*,application/zip,application/x-zip-compressed"
+                        disabled={videoUploading}
+                        onChange={handleUploadGroupVideo}
+                        className="hidden"
+                      />
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <div className={`p-3 rounded-full ${videosDragActive ? 'bg-primary text-black' : 'bg-zinc-900 text-primary border border-zinc-800'}`}>
+                          <Upload size={22} className={videosDragActive ? 'animate-bounce' : ''} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-wider text-white">
+                            Arrastrá y soltá videos o archivos ZIP aquí
+                          </p>
+                          <p className="text-[10px] text-zinc-400 font-medium uppercase mt-0.5">
+                            O haz clic para seleccionar varios archivos MP4, MOV o ZIP (procesamiento en cola secuencial)
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Alerta de videos fallidos con botón de reintento */}
+                    {failedVideoFiles.length > 0 && !videoUploading && (
+                      <div className="p-4 rounded-2xl bg-red-950/40 border border-red-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+                        <div className="flex items-center gap-2.5">
+                          <AlertCircle size={18} className="text-red-400 flex-shrink-0" />
+                          <div>
+                            <p className="text-xs font-bold text-red-300">
+                              {failedVideoFiles.length} video(s) no pudieron completarse en esta vuelta
+                            </p>
+                            <p className="text-[10px] text-red-400/80">
+                              {failedVideoFiles.map(f => f.name).join(', ')}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRetryFailedVideos}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-900/80 hover:bg-red-800 text-white font-black text-xs uppercase tracking-wider transition-colors flex-shrink-0"
+                        >
+                          <RotateCcw size={13} />
+                          Reintentar videos fallidos
+                        </button>
                       </div>
                     )}
 
@@ -2263,7 +2509,7 @@ export const AdminDashboard: React.FC = () => {
                     <table className="w-full text-left border-collapse select-none">
                       <thead>
                         <tr className="bg-zinc-900/40 border-b border-zinc-850">
-                          <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Grupo / Código</th>
+                          <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Código de Grupo</th>
                           <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Colegios Integrantes del Grupo</th>
                           <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Destino</th>
                           <th className="px-6 py-4.5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Fecha de Viaje</th>
@@ -2290,18 +2536,34 @@ export const AdminDashboard: React.FC = () => {
                               onClick={() => setViewingGallerySchool(school)}
                               className="hover:bg-zinc-900/30 cursor-pointer transition-colors group"
                             >
-                              {/* Info Grupo */}
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 flex-shrink-0 relative">
-                                    <img src={toCdnUrl(school.group_photo_web)} alt={school.name} className="w-full h-full object-cover" />
-                                  </div>
-                                  <div>
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-primary/10 border border-primary/30 text-primary text-[10px] font-black uppercase tracking-wider glow-yellow">
-                                      {school.group_code ? `Grupo ${school.group_code}` : 'Grupo Sin Código'}
+                              {/* Código de Grupo (Sin imagen, agrandado con botón copiar WhatsApp) */}
+                              <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                <div className="space-y-1.5" onClick={() => setViewingGallerySchool(school)}>
+                                  <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">
+                                    CÓDIGO DE GRUPO
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-flex items-center px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/30 text-primary text-sm sm:text-base font-black font-mono tracking-wider glow-yellow">
+                                      {school.group_code ? school.group_code : 'SIN CÓDIGO'}
                                     </span>
-                                    <span className="text-[8.5px] text-zinc-500 uppercase tracking-wider block mt-1 font-semibold">ID: {school.id.slice(0,8)}...</span>
+                                    {school.group_code && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => handleCopyGroupCode(e, school)}
+                                        className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-primary/50 text-zinc-300 hover:text-white transition-all shadow-sm group/btn"
+                                        title="Copiar código de grupo para enviar por WhatsApp"
+                                      >
+                                        {copiedGroupCodeId === school.id ? (
+                                          <Check size={15} className="text-emerald-400" />
+                                        ) : (
+                                          <Copy size={15} className="text-primary group-hover/btn:scale-110 transition-transform" />
+                                        )}
+                                      </button>
+                                    )}
                                   </div>
+                                  <span className="text-[8.5px] text-zinc-500 uppercase tracking-wider block font-semibold">
+                                    ID: {school.id.slice(0, 8)}...
+                                  </span>
                                 </div>
                               </td>
 
