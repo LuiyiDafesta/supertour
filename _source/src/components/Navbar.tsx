@@ -1,16 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Logo } from './Logo';
-import { Menu, X, LogIn, LayoutDashboard, LogOut, Home, Compass, Info, MessageSquare } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { Menu, X } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [activeSection, setActiveSection] = useState<'inicio' | 'destinos' | 'nosotros' | null>('inicio');
   const location = useLocation();
-  const navigate = useNavigate();
 
   // Scroll active section spy (only on Landing Page)
   useEffect(() => {
@@ -49,28 +46,7 @@ export const Navbar: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [location.pathname]);
 
-  // Check auth state
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getSession();
-      setIsAdmin(!!data.session);
-    };
 
-    checkUser();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAdmin(!!session);
-    });
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/');
-  };
 
   const isActive = (path: string) => {
     return location.pathname === path;
@@ -182,70 +158,6 @@ export const Navbar: React.FC = () => {
 
 
 
-            {isAdmin ? (
-              <>
-                <Link
-                  to="/admin"
-                  className={`flex items-center gap-1.5 text-sm font-black tracking-wide uppercase px-3 pt-1 pb-2 border-b-2 transition-all duration-200 ${
-                    isActive('/admin') 
-                      ? 'text-primary border-primary glow-text-yellow' 
-                      : 'text-zinc-300 border-transparent hover:text-white hover:border-zinc-700/50'
-                  }`}
-                >
-                  <LayoutDashboard size={16} />
-                  Panel Admin
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-1.5 text-sm font-black tracking-wide uppercase px-3 pt-1 pb-2 border-b-2 border-transparent text-red-400 hover:text-red-300 hover:border-red-500/30 transition-all duration-200"
-                >
-                  <LogOut size={16} />
-                  Salir
-                </button>
-              </>
-            ) : (
-              <Link
-                to="/login"
-                className="flex items-center gap-2 px-4 py-2 rounded-full border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/80 hover:border-zinc-700 text-sm font-semibold text-white tracking-wide uppercase transition-all duration-300"
-              >
-                <LogIn size={15} className="text-primary" />
-                Acceso Admin
-              </Link>
-            )}
-          </div>
-
-          {/* Mobile Admin shortcut */}
-          <div className="md:hidden flex items-center">
-            {isAdmin ? (
-              <div className="flex items-center gap-2">
-                <Link
-                  to="/admin"
-                  className={`p-2.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60 transition-all ${
-                    isActive('/admin') ? 'text-primary border-primary/40 glow-text-yellow' : 'text-zinc-400'
-                  }`}
-                  title="Panel Admin"
-                >
-                  <LayoutDashboard size={15} />
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="p-2.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60 text-red-400 hover:text-red-300 transition-colors"
-                  title="Salir"
-                >
-                  <LogOut size={15} />
-                </button>
-              </div>
-            ) : (
-              <Link
-                to="/login"
-                className={`p-2.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60 transition-all ${
-                  isActive('/login') ? 'text-primary border-primary/40 glow-text-yellow' : 'text-zinc-400'
-                }`}
-                title="Acceso Admin"
-              >
-                <LogIn size={15} />
-              </Link>
-            )}
           </div>
         </div>
       </div>

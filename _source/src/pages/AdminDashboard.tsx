@@ -40,7 +40,9 @@ import {
   Copy,
   RotateCcw,
   AlertCircle,
-  Upload
+  Upload,
+  ArrowLeft,
+  LogOut
 } from 'lucide-react';
 import { useSEO } from '../hooks/useSEO';
 import { compressImage } from '../lib/imageCompressor';
@@ -56,6 +58,15 @@ export const AdminDashboard: React.FC = () => {
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const handleAdminLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      navigate('/login');
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
 
   // Search & Pagination & Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -1736,18 +1747,22 @@ export const AdminDashboard: React.FC = () => {
             </h1>
           </div>
           
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 bg-zinc-900/40 border border-zinc-800/80 px-3.5 py-2 rounded-xl">
-              <Database size={14} className="text-primary" />
-              <span>Supabase + Backblaze B2</span>
-            </div>
-            
+          <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={openCreateModal}
-              className="flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-colors glow-yellow"
+              className="inline-flex items-center gap-2 px-4.5 py-2.5 rounded-xl bg-primary hover:bg-yellow-400 text-black font-extrabold text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-sm"
             >
-              <Plus size={16} />
-              Registrar Colegio
+              <Plus size={16} className="stroke-[2.5]" />
+              <span>Registrar Colegio</span>
+            </button>
+
+            <button
+              onClick={handleAdminLogout}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-red-900/50 text-zinc-400 hover:text-red-400 font-bold text-xs uppercase tracking-wider transition-colors"
+              title="Cerrar sesión de administrador"
+            >
+              <LogOut size={14} />
+              <span>Salir</span>
             </button>
           </div>
         </div>
@@ -1799,19 +1814,22 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5 z-10">
+              <div className="flex items-center gap-2.5 z-10 flex-wrap">
                 <button
                   onClick={() => navigate(`/colegio/${viewingGallerySchool.id}`)}
-                  className="px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-xs font-bold text-white uppercase tracking-wider transition-colors flex items-center gap-1.5"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-700/80 hover:border-primary/50 text-zinc-200 hover:text-white font-bold text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-sm"
+                  title="Ver vista pública del grupo"
                 >
-                  <Eye size={14} className="text-primary" />
-                  Ver Vista Pública
+                  <Eye size={15} className="text-primary" />
+                  <span>Ver Vista Pública</span>
                 </button>
                 <button
                   onClick={() => setViewingGallerySchool(null)}
-                  className="px-4.5 py-2.5 rounded-xl bg-primary text-black font-black text-xs uppercase tracking-wider transition-colors glow-yellow"
+                  className="inline-flex items-center gap-2 px-4.5 py-2.5 rounded-xl bg-primary hover:bg-yellow-400 text-black font-extrabold text-xs uppercase tracking-wider transition-all duration-200 shadow-sm active:scale-95"
+                  title="Volver al listado de colegios"
                 >
-                  ← Volver a Colegios
+                  <ArrowLeft size={15} className="stroke-[2.5]" />
+                  <span>Volver a Colegios</span>
                 </button>
               </div>
             </div>
@@ -1855,8 +1873,8 @@ export const AdminDashboard: React.FC = () => {
                       </div>
 
                       {/* Botón de carga múltiple de Fotos Grupales */}
-                      <label className="inline-flex items-center gap-2 px-4.5 py-2.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-all duration-300 cursor-pointer glow-yellow flex-shrink-0">
-                        <CloudUpload size={16} />
+                      <label className="inline-flex items-center gap-2 px-4.5 py-2.5 rounded-xl bg-primary hover:bg-yellow-400 text-black font-extrabold text-xs uppercase tracking-wider transition-all duration-200 shadow-sm active:scale-95 cursor-pointer flex-shrink-0">
+                        <CloudUpload size={16} className="stroke-[2.5]" />
                         <span>Subir Fotos Grupales HD</span>
                         <input
                           type="file"
