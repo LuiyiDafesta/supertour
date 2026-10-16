@@ -153,3 +153,33 @@ export const getSchoolVideos = (school?: { videos?: any[]; multimedia_url?: stri
 
   return [];
 };
+
+/**
+ * Elimina uno o múltiples archivos de forma permanente de Backblaze B2 a través de delete.php.
+ * Es una función no bloqueante: si falla la conexión con el servidor o el archivo
+ * es un demo/externo, no interrumpe el flujo principal de la aplicación.
+ */
+export const deleteFromB2 = async (urls: (string | null | undefined)[] | string | null | undefined): Promise<void> => {
+  if (!urls) return;
+  const list = (Array.isArray(urls) ? urls : [urls]).filter((u): u is string => typeof u === 'string' && u.trim().length > 0);
+  if (list.length === 0) return;
+
+  try {
+    const res = await fetch('/delete.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ urls: list })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      console.log('B2 delete result:', data);
+    } else {
+      console.warn('B2 delete returned non-200 status:', res.status);
+    }
+  } catch (err) {
+    // Non-blocking: no interrumpe la UI ni Supabase
+    console.warn('B2 delete error (non-blocking):', err);
+  }
+};

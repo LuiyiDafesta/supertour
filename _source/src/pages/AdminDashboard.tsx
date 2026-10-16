@@ -5,7 +5,7 @@ import { School, GalleryPhoto, SchoolItem, GroupVideo } from '../types/database'
 import { Navbar } from '../components/Navbar';
 import { Uploader } from '../components/Uploader';
 import { getAnalyticsEvents, AnalyticsEvent } from '../lib/analytics';
-import { toCdnUrl, normalizeSchoolWithCdn, normalizeGalleryPhotoWithCdn, getSchoolVideos } from '../lib/cdn';
+import { toCdnUrl, normalizeSchoolWithCdn, normalizeGalleryPhotoWithCdn, getSchoolVideos, deleteFromB2 } from '../lib/cdn';
 import { downloadFileDirectly } from '../lib/downloader';
 import { 
   Plus, 
@@ -747,6 +747,10 @@ export const AdminDashboard: React.FC = () => {
 
   const handleDeleteGroupPhoto = async (photo: GalleryPhoto) => {
     if (!window.confirm('¿Estás seguro de eliminar esta foto grupal oficial?')) return;
+    
+    // Eliminar archivo físico de Backblaze B2 (no bloqueante)
+    deleteFromB2([photo.url_web, photo.url_hd]);
+
     try {
       await supabase.from('gallery_photos').delete().eq('id', photo.id);
       toast.success('Foto grupal eliminada.');
@@ -922,6 +926,10 @@ export const AdminDashboard: React.FC = () => {
     if (!window.confirm('¿Estás seguro de eliminar este video del grupo?')) return;
 
     const currentVideos = getSchoolVideos(viewingGallerySchool);
+    const videoToDelete = currentVideos.find(v => v.id === videoId);
+    if (videoToDelete?.url) {
+      deleteFromB2(videoToDelete.url);
+    }
     const updatedVideos = currentVideos.filter(v => v.id !== videoId);
 
     try {
@@ -1390,6 +1398,23 @@ export const AdminDashboard: React.FC = () => {
     e.stopPropagation();
     if (!window.confirm(`¿Estás seguro de eliminar por completo el grupo "${name}" y toda su galería de fotos?\nEsta acción no se puede deshacer.`)) return;
 
+    // Eliminar fotos y videos físicos del bucket Backblaze B2 (no bloqueante)
+    const schoolToDelete = schools.find(s => s.id === schoolId);
+    if (schoolToDelete) {
+      const urlsToRemove: string[] = [
+        schoolToDelete.group_photo_web,
+        schoolToDelete.group_photo_hd,
+        schoolToDelete.multimedia_url,
+      ].filter((u): u is string => !!u);
+
+      const vids = getSchoolVideos(schoolToDelete);
+      vids.forEach(v => {
+        if (v.url) urlsToRemove.push(v.url);
+      });
+
+      deleteFromB2(urlsToRemove);
+    }
+
     try {
       const { error } = await supabase
         .from('schools')
@@ -1412,6 +1437,12 @@ export const AdminDashboard: React.FC = () => {
   // Eliminar Foto Individual de la Galería
   const handleDeletePhoto = async (photoId: string) => {
     if (!window.confirm('¿Estás seguro de eliminar esta foto individual de la galería?')) return;
+
+    // Eliminar archivo físico (versión Web y HD) de Backblaze B2 (no bloqueante)
+    const photoToDelete = galleryPhotos.find(p => p.id === photoId);
+    if (photoToDelete) {
+      deleteFromB2([photoToDelete.url_web, photoToDelete.url_hd]);
+    }
 
     try {
       const { error } = await supabase
