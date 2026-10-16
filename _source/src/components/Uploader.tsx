@@ -254,14 +254,14 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, onUploa
   const globalProgress = totalFiles > 0 ? Math.round((uploadedFiles / totalFiles) * 100) : 0;
 
   return (
-    <div className="w-full bg-zinc-950 rounded-2xl border border-zinc-800 p-6 sm:p-8 shadow-premium select-none">
+    <div className="w-full select-none space-y-4">
       
       {/* Drag & Drop File Portal */}
       <div
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
-        className="w-full py-12 px-6 rounded-2xl border-2 border-dashed border-zinc-750 hover:border-primary/60 bg-zinc-900/30 hover:bg-zinc-900/60 text-center cursor-pointer transition-all duration-300 group mb-6"
+        className="w-full py-8 px-6 rounded-2xl border-2 border-dashed border-zinc-800 hover:border-primary/60 bg-zinc-900/20 hover:bg-zinc-900/40 text-center cursor-pointer transition-all duration-300 group"
       >
         <input
           type="file"
@@ -271,12 +271,12 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, onUploa
           accept="image/*"
           className="hidden"
         />
-        <Upload size={40} className="mx-auto text-zinc-400 group-hover:text-primary transition-colors duration-300 mb-3" />
-        <p className="text-base font-black text-white uppercase tracking-wider">
-          Arrastrá tus fotos en HD acá o <span className="text-primary hover:underline">explorá los archivos</span>
+        <Upload size={32} className="mx-auto text-primary group-hover:scale-110 transition-transform duration-300 mb-2" />
+        <p className="text-sm font-black text-white uppercase tracking-wider">
+          Arrastrá tus fotos acá o <span className="text-primary hover:underline">explorá los archivos</span>
         </p>
-        <p className="text-xs font-semibold text-zinc-400 mt-2">
-          Formatos soportados: JPG, PNG, WEBP. Podes seleccionar decenas de fotos al mismo tiempo.
+        <p className="text-[11px] font-semibold text-zinc-400 mt-1 uppercase">
+          Formatos soportados: JPG, PNG, WEBP. Podés seleccionar decenas de fotos al mismo tiempo.
         </p>
       </div>
 

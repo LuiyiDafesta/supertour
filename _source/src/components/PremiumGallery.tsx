@@ -207,7 +207,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
                         <button
                           onClick={(e) => copyPhotoLink(photo.url_hd, photo.id, e)}
                           className="p-1.5 rounded-md bg-zinc-950/60 hover:bg-zinc-900 text-white border border-zinc-800 hover:border-zinc-700 transition-all"
-                          title="Copiar Enlace HD"
+                          title="Copiar Enlace"
                         >
                           {copiedId === photo.id ? <Check size={12} className="text-primary" /> : <Copy size={12} />}
                         </button>
@@ -240,7 +240,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
                           className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/95 text-black text-[10px] font-black uppercase tracking-wider transition-all shadow-[0_0_12px_rgba(250,204,21,0.2)]"
                         >
                           <Download size={10} />
-                          Descargar HD
+                          Descargar
                         </button>
                         <div className="p-2 rounded-lg bg-zinc-900/60 hover:bg-zinc-900 text-white border border-zinc-800 transition-colors">
                           <Maximize2 size={12} />
@@ -391,7 +391,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
               className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-primary hover:bg-primary/95 text-black text-xs font-black uppercase tracking-wider transition-all glow-yellow"
             >
               <Download size={12} />
-              Descargar HD
+              Descargar Foto
             </button>
           </div>
 

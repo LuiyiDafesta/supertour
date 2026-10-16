@@ -1967,7 +1967,7 @@ export const AdminDashboard: React.FC = () => {
                         </p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 max-h-[500px] overflow-y-auto pr-1.5 scrollbar-thin">
                         {groupPhotos.map((photo, idx) => {
                           const isCover = photo.url_web === viewingGallerySchool.group_photo_web || 
                             photo.url_hd === viewingGallerySchool.group_photo_hd ||
@@ -2241,7 +2241,7 @@ export const AdminDashboard: React.FC = () => {
                         </p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[440px] overflow-y-auto pr-1.5 scrollbar-thin">
                         {groupVideos.map((vid, vIdx) => {
                           const isZip = vid.url.toLowerCase().endsWith('.zip');
                           const isVideoFile = vid.url.toLowerCase().match(/\.(mp4|webm|mov|m4v)(\?.*)?$/i);
@@ -2257,7 +2257,7 @@ export const AdminDashboard: React.FC = () => {
                                     {isZip ? <Layers size={16} /> : <Film size={16} />}
                                   </span>
                                   <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-zinc-950 text-zinc-400 border border-zinc-850">
-                                    {isZip ? 'ARCHIVO ZIP' : isVideoFile ? 'VIDEO HD' : 'ENLACE'}
+                                    {isZip ? 'ARCHIVO ZIP' : isVideoFile ? 'VIDEO' : 'ENLACE'}
                                   </span>
                                 </div>
                                 <h4 className="text-sm font-black uppercase text-white tracking-tight line-clamp-1" title={vid.title}>
@@ -2309,94 +2309,80 @@ export const AdminDashboard: React.FC = () => {
                   {/* ============================================================== */}
                   {/* SECCIÓN 3: GALERÍA DE FOTOS DEL VIAJE (FOTOS COMUNES)          */}
                   {/* ============================================================== */}
-                  <div className="space-y-6">
-                    <div className="border-b border-zinc-900 pb-3">
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest mb-1.5">
-                        <Sparkles size={11} /> Galería General
+                  <div className="bg-zinc-950 border border-zinc-850 p-6 sm:p-7 rounded-3xl space-y-6 shadow-premium relative overflow-hidden">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-900">
+                      <div>
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest mb-1.5">
+                          <Sparkles size={11} /> Galería General
+                        </div>
+                        <h3 className="text-lg font-black uppercase tracking-tight text-white flex items-center gap-2">
+                          <ImageIcon size={18} className="text-primary" />
+                          Galería de Fotos del Viaje ({tripPhotos.length})
+                        </h3>
+                        <p className="text-xs text-zinc-400 mt-0.5 font-medium">
+                          Fotos comunes de excursiones, fiestas y actividades compartidas por todos los chicos del grupo.
+                        </p>
                       </div>
-                      <h3 className="text-xl font-black uppercase tracking-tight text-white flex items-center gap-2">
-                        <ImageIcon size={20} className="text-primary" />
-                        Galería de Fotos del Viaje ({tripPhotos.length})
-                      </h3>
-                      <p className="text-xs text-zinc-400 mt-0.5 font-medium">
-                        Fotos comunes de excursiones, fiestas y actividades compartidas por todos los chicos del grupo.
-                      </p>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                      {/* Columna Izquierda: Uploader de fotos comunes */}
-                      <div className="lg:col-span-5">
-                        <div className="bg-zinc-950 border border-zinc-850 p-6 rounded-3xl space-y-4 shadow-premium">
-                          <h3 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-1.5 leading-none">
-                            <CloudUpload size={15} />
-                            Cargar Nuevas Fotos
-                          </h3>
-                          <p className="text-[11px] text-zinc-400 uppercase leading-relaxed font-semibold">
-                            Las fotos se procesarán de inmediato en tu navegador. La versión Web reducida y la versión HD se subirán con enrutamiento de CDN Cloudflare.
-                          </p>
+                    {/* Uploader Arriba (Full Width) */}
+                    <div>
+                      <Uploader
+                        schoolId={viewingGallerySchool.id}
+                        onUploadComplete={() => loadSchoolPhotos(viewingGallerySchool.id)}
+                      />
+                    </div>
 
-                          <Uploader
-                            schoolId={viewingGallerySchool.id}
-                            onUploadComplete={() => loadSchoolPhotos(viewingGallerySchool.id)}
-                          />
-                        </div>
+                    {/* Grilla de Fotos del Viaje Abajo (Full Width con 2 filas visibles y scroll) */}
+                    {loadingPhotos ? (
+                      <div className="text-center py-16 text-xs text-zinc-500 font-bold uppercase tracking-wider animate-pulse">
+                        Cargando fotos del viaje...
                       </div>
-
-                      {/* Columna Derecha: Fotos Registradas del viaje */}
-                      <div className="lg:col-span-7">
-                        <div className="bg-zinc-950 border border-zinc-850 p-6 rounded-3xl space-y-4.5 shadow-premium">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 border-b border-zinc-900 gap-3">
-                            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-300 flex items-center gap-1.5 leading-none">
-                              <ImageIcon size={14} className="text-primary" />
-                              Fotos del Viaje ({tripPhotos.length})
-                            </h3>
-                          </div>
-
-                          {loadingPhotos ? (
-                            <div className="text-center py-20 text-xs text-zinc-500 font-bold uppercase tracking-wider animate-pulse">
-                              Cargando fotos del viaje...
-                            </div>
-                          ) : tripPhotos.length === 0 ? (
-                            <div className="text-center py-20 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-600 space-y-2">
-                              <ImageIcon size={28} className="mx-auto text-zinc-800 mb-2 animate-bounce" />
-                              <p className="text-xs font-bold uppercase tracking-wider">No hay fotos de actividades registradas</p>
-                              <p className="text-[10px] uppercase mt-1 text-zinc-500">
-                                Utilizá el cargador de la izquierda para arrastrar decenas de fotos de excursiones o fiestas.
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[560px] overflow-y-auto pr-1 scrollbar-thin">
-                              {tripPhotos.map((photo, idx) => (
-                                <div key={photo.id || idx} className="group relative aspect-square rounded-xl overflow-hidden border border-zinc-850 bg-zinc-900/20">
-                                  <img src={toCdnUrl(photo.url_web || photo.url_hd)} alt="galería viaje" className="w-full h-full object-cover" />
-                                  <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex flex-col justify-between p-2.5 transition-opacity">
-                                    <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">#{idx + 1}</span>
-                                    <div className="flex justify-end gap-1 mt-auto">
-                                      <button
-                                        type="button"
-                                        onClick={() => setPreviewPhotoModal(photo)}
-                                        className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white flex items-center justify-center transition-colors"
-                                        title="Ver foto"
-                                      >
-                                        <ZoomIn size={12} />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeletePhoto(photo.id)}
-                                        className="w-7 h-7 rounded-lg bg-red-950/80 hover:bg-red-600 border border-red-900 text-red-300 hover:text-white flex items-center justify-center transition-colors"
-                                        title="Eliminar Foto"
-                                      >
-                                        <Trash2 size={12} />
-                                      </button>
-                                    </div>
-                                  </div>
+                    ) : tripPhotos.length === 0 ? (
+                      <div className="text-center py-10 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-600 space-y-1.5">
+                        <ImageIcon size={28} className="mx-auto text-zinc-800 mb-1" />
+                        <p className="text-xs font-bold uppercase tracking-wider">No hay fotos de actividades registradas</p>
+                        <p className="text-[10px] uppercase mt-0.5 text-zinc-500">
+                          Utilizá el cargador superior para arrastrar y soltar fotos de excursiones o fiestas.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 pt-2">
+                        <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                            Fotos Registradas ({tripPhotos.length})
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-[460px] overflow-y-auto pr-1.5 scrollbar-thin">
+                          {tripPhotos.map((photo, idx) => (
+                            <div key={photo.id || idx} className="group relative aspect-square rounded-xl overflow-hidden border border-zinc-850 bg-zinc-900/20">
+                              <img src={toCdnUrl(photo.url_web || photo.url_hd)} alt="galería viaje" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex flex-col justify-between p-2.5 transition-opacity">
+                                <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">#{idx + 1}</span>
+                                <div className="flex justify-end gap-1 mt-auto">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewPhotoModal(photo)}
+                                    className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white flex items-center justify-center transition-colors"
+                                    title="Ver foto"
+                                  >
+                                    <ZoomIn size={12} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeletePhoto(photo.id)}
+                                    className="w-7 h-7 rounded-lg bg-red-950/80 hover:bg-red-600 border border-red-900 text-red-300 hover:text-white flex items-center justify-center transition-colors"
+                                    title="Eliminar Foto"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
                                 </div>
-                              ))}
+                              </div>
                             </div>
-                          )}
+                          ))}
                         </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               );
@@ -3786,16 +3772,16 @@ export const AdminDashboard: React.FC = () => {
             <div className="p-4 flex items-center justify-between border-b border-zinc-900 flex-shrink-0">
               <span className="text-xs font-black uppercase text-zinc-300 tracking-wider flex items-center gap-2">
                 <ImageIcon size={14} className="text-primary" />
-                Vista Previa en Alta Definición
+                Vista Previa
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => downloadFileDirectly(previewPhotoModal.url_hd || previewPhotoModal.url_web, 'SuperTour-FotoHD.jpg')}
+                  onClick={() => downloadFileDirectly(previewPhotoModal.url_hd || previewPhotoModal.url_web, 'SuperTour-Foto.jpg')}
                   className="px-3 py-1.5 rounded-xl bg-primary text-black font-black text-xs uppercase tracking-wider flex items-center gap-1.5 glow-yellow"
                 >
                   <Download size={13} />
-                  Descargar HD
+                  Descargar Foto
                 </button>
                 <button
                   type="button"

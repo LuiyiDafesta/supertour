@@ -719,7 +719,7 @@ export const SchoolDetailPage: React.FC = () => {
                           {vid.title}
                         </h3>
                         <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-black uppercase text-primary flex-shrink-0">
-                          {isZip ? 'ZIP' : 'HD'}
+                          {isZip ? 'ZIP' : 'VIDEO'}
                         </span>
                       </div>
 
@@ -807,20 +807,17 @@ export const SchoolDetailPage: React.FC = () => {
 
         {/* Sales Promo Banner */}
         {bannerEnabled && (
-          <div className="glass-card rounded-3xl border border-zinc-800/40 p-6 sm:p-8 bg-zinc-950/85 shadow-premium relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6 mb-16 animate-fade-in select-none">
+          <div className="glass-card rounded-3xl border border-zinc-800/40 p-6 sm:p-7 bg-zinc-950/85 shadow-premium relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6 mb-16 animate-fade-in select-none">
             <div className="absolute top-0 right-0 h-32 w-32 bg-primary/5 blur-[80px] rounded-full pointer-events-none" />
             
-            <div className="space-y-2 max-w-xl">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-[9px] font-black text-primary uppercase tracking-widest leading-none glow-yellow animate-pulse">
+            <div className="space-y-1.5 max-w-xl">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-[9px] font-black text-primary uppercase tracking-widest leading-none glow-yellow">
                 <Sparkles size={10} />
                 Oferta Exclusiva Egresados
               </div>
-              <h3 className="text-lg font-black uppercase text-white tracking-tight leading-snug">
-                Adquirí tus fotos digitales adicionales del viaje
+              <h3 className="text-base sm:text-lg font-black uppercase text-white tracking-tight leading-snug">
+                Adquirí tus fotos adicionales del viaje
               </h3>
-              <p className="text-[10px] sm:text-xs text-zinc-400 font-semibold uppercase leading-normal tracking-wide">
-                Accedé a nuestra tienda oficial para comprar fotos digitales adicionales a las incluidas en tu contrato y guardá todos los recuerdos de tu viaje.
-              </p>
             </div>
 
             <div className="flex-shrink-0 w-full md:w-auto">
@@ -829,7 +826,7 @@ export const SchoolDetailPage: React.FC = () => {
                 onClick={handleBannerClick}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-[1.03] glow-yellow shadow-md w-full"
+                className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-widest transition-all duration-300 transform hover:scale-[1.03] glow-yellow shadow-md w-full md:w-auto"
               >
                 <Sparkles size={13} />
                 Ir a la Tienda
