@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GalleryPhoto } from '../types/database';
 import { downloadFileDirectly } from '../lib/downloader';
 import { trackEvent } from '../lib/analytics';
 import { toCdnUrl } from '../lib/cdn';
+import { toast } from 'sonner';
 import { 
   Download, 
   Share2, 
@@ -17,7 +18,10 @@ import {
   ZoomOut, 
   Check, 
   Copy,
-  Sparkles
+  Sparkles,
+  CheckSquare,
+  Square,
+  Loader2
 } from 'lucide-react';
 
 interface PremiumGalleryProps {
@@ -38,9 +42,17 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
   const [currentPage, setCurrentPage] = useState<number>(1);
   const photosPerPage = 24; // 24 photos per page
 
-  // Reset page when photo array changes
+  // Multi-selection & Batch Download State
+  const [selectionMode, setSelectionMode] = useState<boolean>(false);
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [downloadProgress, setDownloadProgress] = useState<{ current: number; total: number } | null>(null);
+  const cancelDownloadRef = useRef<boolean>(false);
+
+  // Reset page and selection when photo array changes
   useEffect(() => {
     setCurrentPage(1);
+    setSelectedPhotoIds(new Set());
   }, [photos]);
 
   const totalPhotos = photos.length;
@@ -100,6 +112,100 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
     setTimeout(() => setShareSuccess(false), 2000);
   };
 
+  // Selection handlers
+  const toggleSelectionMode = () => {
+    if (selectionMode) {
+      setSelectionMode(false);
+      setSelectedPhotoIds(new Set());
+    } else {
+      setSelectionMode(true);
+    }
+  };
+
+  const togglePhotoSelection = (photoId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSelectedPhotoIds(prev => {
+      const next = new Set(prev);
+      if (next.has(photoId)) {
+        next.delete(photoId);
+      } else {
+        next.add(photoId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectCurrentPage = () => {
+    setSelectedPhotoIds(prev => {
+      const next = new Set(prev);
+      currentPhotos.forEach(p => next.add(p.id));
+      return next;
+    });
+    toast.info(`${currentPhotos.length} fotos de esta página añadidas a la selección.`);
+  };
+
+  const handleSelectAll = () => {
+    const next = new Set<string>();
+    photos.forEach(p => next.add(p.id));
+    setSelectedPhotoIds(next);
+    toast.info(`Todas las ${photos.length} fotos del grupo seleccionadas.`);
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedPhotoIds(new Set());
+  };
+
+  // Sequential batch download engine
+  const handleDownloadMultiple = async (targetPhotos: GalleryPhoto[], batchTitle: string) => {
+    if (targetPhotos.length === 0) return;
+    setIsDownloading(true);
+    cancelDownloadRef.current = false;
+    setDownloadProgress({ current: 0, total: targetPhotos.length });
+
+    toast.info(`Iniciando descarga secuencial de ${targetPhotos.length} fotos...`);
+
+    let count = 0;
+    for (let i = 0; i < targetPhotos.length; i++) {
+      if (cancelDownloadRef.current) {
+        toast.warning('Descarga en lote cancelada.');
+        break;
+      }
+      const photo = targetPhotos[i];
+      const filename = `SuperTour-${schoolName}-${i + 1}.jpg`;
+      const url = photo.url_hd || photo.url_web;
+
+      try {
+        await downloadFileDirectly(url, filename);
+        count++;
+        setDownloadProgress({ current: count, total: targetPhotos.length });
+        trackEvent({
+          event_type: 'photo_download',
+          school_id: photo.school_id,
+          metadata: { photo_id: photo.id, batch: batchTitle }
+        });
+      } catch (err) {
+        console.error(`Error al descargar foto ${i + 1}:`, err);
+      }
+
+      // Small delay between downloads so the browser creates files without pop-up blocking
+      if (i < targetPhotos.length - 1) {
+        await new Promise(r => setTimeout(r, 350));
+      }
+    }
+
+    if (!cancelDownloadRef.current) {
+      toast.success(`¡Descarga finalizada! Se guardaron ${count} fotos.`);
+    }
+
+    setIsDownloading(false);
+    setDownloadProgress(null);
+  };
+
+  const handleDownloadSelected = () => {
+    const selected = photos.filter(p => selectedPhotoIds.has(p.id));
+    handleDownloadMultiple(selected, 'seleccionadas');
+  };
+
   // Return tailwind grid column classes based on count
   const getGridColsClass = () => {
     switch (columnCount) {
@@ -114,11 +220,39 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
 
   return (
     <div className="w-full py-12 select-none">
-      {/* Gallery Controls (Grid column switches) */}
-      <div className="flex justify-end gap-6 mb-10 pb-6 border-b border-zinc-900">
-        
-        {/* View toggles (Columns count selector) */}
-        <div className="hidden sm:flex items-center gap-3 bg-zinc-900/50 p-1 rounded-xl border border-zinc-800/60">
+      {/* Gallery Controls (Batch Actions & Grid column switches) */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-zinc-900">
+        {/* Left: Bulk Actions */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* Button: Descargar Todas las Fotos */}
+          <button
+            type="button"
+            disabled={isDownloading || totalPhotos === 0}
+            onClick={() => handleDownloadMultiple(photos, `todas-${totalPhotos}`)}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-800 hover:border-zinc-700 font-black text-xs uppercase tracking-wider transition-all disabled:opacity-50"
+            title="Descargar todas las fotos del viaje (no sólo las de esta página)"
+          >
+            <Download size={14} className="text-primary" />
+            <span>Descargar Todas ({totalPhotos})</span>
+          </button>
+
+          {/* Toggle: Modo Selección */}
+          <button
+            type="button"
+            onClick={toggleSelectionMode}
+            className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all border ${
+              selectionMode 
+                ? 'bg-primary text-black border-primary glow-yellow' 
+                : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800'
+            }`}
+          >
+            {selectionMode ? <X size={14} /> : <CheckSquare size={14} />}
+            <span>{selectionMode ? 'Cerrar Selección' : 'Seleccionar Fotos'}</span>
+          </button>
+        </div>
+
+        {/* Right: View toggles (Columns count selector) */}
+        <div className="hidden sm:flex items-center gap-3 bg-zinc-900/50 p-1 rounded-xl border border-zinc-800/60 self-end sm:self-auto">
           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2.5">Columnas</span>
           <button
             onClick={() => setColumnCount(2)}
@@ -159,6 +293,52 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
         </div>
       </div>
 
+      {/* Sub-bar active during selection mode */}
+      {selectionMode && (
+        <div className="mb-8 p-4 rounded-2xl bg-zinc-950/90 border border-primary/40 flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in shadow-xl">
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <span className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-primary font-black text-xs uppercase tracking-wider">
+              {selectedPhotoIds.size} de {totalPhotos} seleccionadas
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSelectCurrentPage}
+                className="text-[11px] font-bold text-zinc-400 hover:text-white uppercase transition-colors"
+              >
+                Página Actual ({currentPhotos.length})
+              </button>
+              <span className="text-zinc-600">•</span>
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="text-[11px] font-bold text-zinc-400 hover:text-white uppercase transition-colors"
+              >
+                Todas ({totalPhotos})
+              </button>
+              <span className="text-zinc-600">•</span>
+              <button
+                type="button"
+                onClick={handleDeselectAll}
+                className="text-[11px] font-bold text-zinc-400 hover:text-white uppercase transition-colors"
+              >
+                Limpiar
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={selectedPhotoIds.size === 0 || isDownloading}
+            onClick={handleDownloadSelected}
+            className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-widest transition-all glow-yellow disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
+          >
+            <Download size={14} />
+            <span>Descargar Seleccionadas ({selectedPhotoIds.size})</span>
+          </button>
+        </div>
+      )}
+
       {/* Empty State */}
       {photos.length === 0 ? (
         <div className="text-center py-20 px-6 border border-zinc-900 bg-zinc-950/20 rounded-2xl">
@@ -172,19 +352,42 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
           <div className={`grid ${getGridColsClass()} gap-6 transition-all duration-500`}>
             {currentPhotos.map((photo) => {
               const originalIndex = photos.findIndex((p) => p.id === photo.id);
+              const isSelected = selectedPhotoIds.has(photo.id);
+
               return (
                 <div
                   key={photo.id}
-                  onClick={() => {
-                    setLightboxIndex(originalIndex);
-                    trackEvent({
-                      event_type: 'photo_click',
-                      school_id: photo.school_id,
-                      metadata: { photo_id: photo.id }
-                    });
+                  onClick={(e) => {
+                    if (selectionMode) {
+                      togglePhotoSelection(photo.id, e);
+                    } else {
+                      setLightboxIndex(originalIndex);
+                      trackEvent({
+                        event_type: 'photo_click',
+                        school_id: photo.school_id,
+                        metadata: { photo_id: photo.id }
+                      });
+                    }
                   }}
-                  className="group relative aspect-square bg-zinc-900/50 rounded-xl overflow-hidden border border-zinc-900 cursor-zoom-in shadow-md hover:shadow-[0_8px_30px_rgba(0,0,0,0.8)] hover:border-primary/20 transition-all duration-300"
+                  className={`group relative aspect-square bg-zinc-900/50 rounded-xl overflow-hidden border transition-all duration-300 shadow-md ${
+                    selectionMode 
+                      ? (isSelected ? 'border-primary ring-2 ring-primary/60 scale-[0.98]' : 'border-zinc-800 opacity-80 hover:opacity-100 hover:border-zinc-600')
+                      : 'border-zinc-900 cursor-zoom-in hover:shadow-[0_8px_30px_rgba(0,0,0,0.8)] hover:border-primary/20'
+                  }`}
                 >
+                  {/* Selection Mode Checkbox Badge */}
+                  {selectionMode && (
+                    <div className="absolute top-3 left-3 z-30">
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center border transition-all ${
+                        isSelected 
+                          ? 'bg-primary border-primary text-black shadow-lg shadow-primary/30' 
+                          : 'bg-black/70 border-zinc-500 text-transparent backdrop-blur-sm group-hover:border-white'
+                      }`}>
+                        <Check size={14} strokeWidth={3} className={isSelected ? 'block' : 'opacity-0'} />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Image element */}
                   <img
                     src={toCdnUrl(photo.url_web)}
@@ -193,61 +396,63 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
                     className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
                   />
 
-                  {/* Hover Dark Overlay Shield */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-zinc-950/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4" style={{ pointerEvents: 'auto' }}>
-                    
-                    {/* Top card bar (Brand watermark) */}
-                    <div className="flex justify-between items-start">
-                      <span className="text-[9px] font-black text-black bg-primary px-2.5 py-0.5 rounded-full uppercase tracking-wider glow-yellow font-outfit">
-                        SuperTour
-                      </span>
+                  {/* Hover Dark Overlay Shield (only when not in selection mode) */}
+                  {!selectionMode && (
+                    <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-zinc-950/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4" style={{ pointerEvents: 'auto' }}>
                       
-                      {/* Share action floating button */}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={(e) => copyPhotoLink(photo.url_hd, photo.id, e)}
-                          className="p-1.5 rounded-md bg-zinc-950/60 hover:bg-zinc-900 text-white border border-zinc-800 hover:border-zinc-700 transition-all"
-                          title="Copiar Enlace"
-                        >
-                          {copiedId === photo.id ? <Check size={12} className="text-primary" /> : <Copy size={12} />}
-                        </button>
-                        <button
-                          onClick={(e) => shareOnWhatsApp(photo.url_hd, e)}
-                          className="p-1.5 rounded-md bg-zinc-950/60 hover:bg-zinc-900 text-white border border-zinc-800 hover:border-zinc-700 transition-all"
-                          title="Compartir WhatsApp"
-                        >
-                          <Share2 size={12} />
-                        </button>
+                      {/* Top card bar (Brand watermark) */}
+                      <div className="flex justify-between items-start">
+                        <span className="text-[9px] font-black text-black bg-primary px-2.5 py-0.5 rounded-full uppercase tracking-wider glow-yellow font-outfit">
+                          SuperTour
+                        </span>
+                        
+                        {/* Share action floating button */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={(e) => copyPhotoLink(photo.url_hd, photo.id, e)}
+                            className="p-1.5 rounded-md bg-zinc-950/60 hover:bg-zinc-900 text-white border border-zinc-800 hover:border-zinc-700 transition-all"
+                            title="Copiar Enlace"
+                          >
+                            {copiedId === photo.id ? <Check size={12} className="text-primary" /> : <Copy size={12} />}
+                          </button>
+                          <button
+                            onClick={(e) => shareOnWhatsApp(photo.url_hd, e)}
+                            className="p-1.5 rounded-md bg-zinc-950/60 hover:bg-zinc-900 text-white border border-zinc-800 hover:border-zinc-700 transition-all"
+                            title="Compartir WhatsApp"
+                          >
+                            <Share2 size={12} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Bottom card bar (Expand / Download triggers) */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                        Foto {originalIndex + 1}
-                      </span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            downloadFileDirectly(photo.url_hd, `SuperTour-${schoolName}-${originalIndex + 1}.jpg`);
-                            trackEvent({
-                              event_type: 'photo_download',
-                              school_id: photo.school_id,
-                              metadata: { photo_id: photo.id, size: 'HD' }
-                            });
-                          }}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/95 text-black text-[10px] font-black uppercase tracking-wider transition-all shadow-[0_0_12px_rgba(250,204,21,0.2)]"
-                        >
-                          <Download size={10} />
-                          Descargar
-                        </button>
-                        <div className="p-2 rounded-lg bg-zinc-900/60 hover:bg-zinc-900 text-white border border-zinc-800 transition-colors">
-                          <Maximize2 size={12} />
+                      {/* Bottom card bar (Expand / Download triggers) */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                          Foto {originalIndex + 1}
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadFileDirectly(photo.url_hd, `SuperTour-${schoolName}-${originalIndex + 1}.jpg`);
+                              trackEvent({
+                                event_type: 'photo_download',
+                                school_id: photo.school_id,
+                                metadata: { photo_id: photo.id, size: 'HD' }
+                              });
+                            }}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/95 text-black text-[10px] font-black uppercase tracking-wider transition-all shadow-[0_0_12px_rgba(250,204,21,0.2)]"
+                          >
+                            <Download size={10} />
+                            Descargar
+                          </button>
+                          <div className="p-2 rounded-lg bg-zinc-900/60 hover:bg-zinc-900 text-white border border-zinc-800 transition-colors">
+                            <Maximize2 size={12} />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })}
@@ -314,6 +519,34 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* FLOATING BATCH DOWNLOAD PROGRESS BAR */}
+      {downloadProgress && (
+        <div className="fixed bottom-6 right-6 z-[120] bg-zinc-950/95 border border-primary/40 p-4 rounded-2xl shadow-2xl backdrop-blur-md max-w-xs w-full animate-fade-in select-none">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-black uppercase text-white flex items-center gap-2">
+              <Download size={14} className="text-primary animate-bounce" />
+              Descargando fotos
+            </span>
+            <span className="text-xs font-mono font-bold text-primary">
+              {downloadProgress.current} / {downloadProgress.total}
+            </span>
+          </div>
+          <div className="w-full h-2 rounded-full bg-zinc-900 overflow-hidden mb-3">
+            <div 
+              className="h-full bg-primary transition-all duration-300"
+              style={{ width: `${Math.round((downloadProgress.current / downloadProgress.total) * 100)}%` }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => { cancelDownloadRef.current = true; }}
+            className="w-full py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[10px] font-bold uppercase tracking-wider transition-colors"
+          >
+            Detener Descarga
+          </button>
         </div>
       )}
 

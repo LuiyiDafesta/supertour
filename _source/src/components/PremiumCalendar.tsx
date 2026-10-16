@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, Sparkles, ChevronRight } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, Sparkles, ChevronRight, X, Lock, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { School } from '../types/database';
 import { trackEvent } from '../lib/analytics';
@@ -16,6 +17,39 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  // Security PIN Modal State for Calendar
+  const [selectedSchoolForPin, setSelectedSchoolForPin] = useState<School | null>(null);
+  const [calendarPinInput, setCalendarPinInput] = useState<string>('');
+  const [calendarPinError, setCalendarPinError] = useState<string | null>(null);
+
+  const handleSelectSchool = (school: School) => {
+    const authKey = `supertour_auth_${school.id}`;
+    if (sessionStorage.getItem(authKey) === 'true' || !school.group_code || school.group_code.trim() === '') {
+      navigate(`/colegio/${school.id}`);
+    } else {
+      setSelectedSchoolForPin(school);
+      setCalendarPinInput('');
+      setCalendarPinError(null);
+    }
+  };
+
+  const handleCalendarPinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSchoolForPin) return;
+
+    const expected = (selectedSchoolForPin.group_code || '').trim().toUpperCase();
+    const entered = calendarPinInput.trim().toUpperCase();
+
+    if (entered === expected) {
+      sessionStorage.setItem(`supertour_auth_${selectedSchoolForPin.id}`, 'true');
+      const schoolId = selectedSchoolForPin.id;
+      setSelectedSchoolForPin(null);
+      navigate(`/colegio/${schoolId}`);
+    } else {
+      setCalendarPinError('El código de grupo no coincide con este viaje. Verificá el código enviado por WhatsApp.');
+    }
+  };
 
   // Mock data to ensure working site out of the box
   // Mock data to ensure working site out of the box
@@ -362,7 +396,7 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
                   {activeDaySchools.map((school) => (
                     <div
                       key={school.id}
-                      onClick={() => navigate(`/colegio/${school.id}`)}
+                      onClick={() => handleSelectSchool(school)}
                       className="group flex items-center justify-between p-4 rounded-xl bg-zinc-900/60 border border-zinc-800/80 hover:border-primary/40 hover:bg-zinc-900 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-[0_4px_20px_rgba(250,204,21,0.05)] transform hover:-translate-y-0.5"
                     >
                       <div className="flex items-center gap-4">
@@ -408,6 +442,84 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
           )}
         </div>
       </div>
+
+      {/* MODAL DE SEGURIDAD PARA INGRESO DE CÓDIGO DE GRUPO */}
+      {selectedSchoolForPin && createPortal(
+        <div 
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in select-none"
+          onClick={() => setSelectedSchoolForPin(null)}
+        >
+          <div 
+            className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6 sm:p-8 max-w-md w-full shadow-2xl relative text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setSelectedSchoolForPin(null)}
+              className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
+            >
+              <X size={16} />
+            </button>
+
+            <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4 glow-yellow">
+              <Lock size={26} className="text-primary" />
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest mb-2">
+              <Sparkles size={10} />
+              Acceso Privado al Grupo
+            </div>
+
+            <h3 className="text-lg sm:text-xl font-black uppercase text-white tracking-tight">
+              {selectedSchoolForPin.name}
+            </h3>
+
+            {selectedSchoolForPin.school_names && selectedSchoolForPin.school_names.length > 1 && (
+              <div className="flex flex-wrap gap-1.5 justify-center mt-2">
+                {selectedSchoolForPin.school_names.map((sName, idx) => (
+                  <span key={idx} className="inline-flex items-center text-[10px] font-bold text-zinc-300 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-md uppercase">
+                    {sName}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <p className="text-xs text-zinc-400 mt-3 leading-relaxed">
+              Ingresá el <strong className="text-white">Código de Grupo</strong> enviado por WhatsApp para desbloquear y ver la galería oficial de este viaje.
+            </p>
+
+            {calendarPinError && (
+              <div className="mt-4 p-3 rounded-xl bg-red-950/60 border border-red-900/80 text-red-400 text-xs text-left flex items-start gap-2 animate-fade-in">
+                <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
+                <span>{calendarPinError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCalendarPinSubmit} className="mt-5 space-y-3.5">
+              <input
+                type="text"
+                autoFocus
+                maxLength={12}
+                value={calendarPinInput}
+                onChange={(e) => {
+                  setCalendarPinInput(e.target.value);
+                  if (calendarPinError) setCalendarPinError(null);
+                }}
+                placeholder="EJ: 0001"
+                className="w-full text-center text-2xl font-mono font-black uppercase tracking-widest py-3.5 px-4 rounded-xl bg-zinc-900 border border-zinc-700 focus:border-primary text-white focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all shadow-inner placeholder:text-zinc-500"
+              />
+
+              <button
+                type="submit"
+                disabled={!calendarPinInput.trim()}
+                className="w-full py-3.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black uppercase text-xs tracking-widest transition-all glow-yellow disabled:opacity-40 disabled:scale-95 disabled:hover:bg-primary shadow-lg cursor-pointer"
+              >
+                Ingresar a la Galería
+              </button>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

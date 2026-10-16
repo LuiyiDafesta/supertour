@@ -23,7 +23,9 @@ import {
   ZoomIn,
   X,
   Star,
-  Layers
+  Layers,
+  Lock,
+  AlertCircle
 } from 'lucide-react';
 import { Footer } from '../components/Footer';
 import { useSEO } from '../hooks/useSEO';
@@ -36,6 +38,12 @@ export const SchoolDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [shareText, setShareText] = useState('Compartir');
   const [bannerEnabled, setBannerEnabled] = useState(false);
+
+  // Group Security Gate (PIN) State
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
+  const [pinInput, setPinInput] = useState<string>('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [shakePin, setShakePin] = useState<boolean>(false);
 
   // Group Media State
   const [activeGroupPhotoIdx, setActiveGroupPhotoIdx] = useState(0);
@@ -270,6 +278,38 @@ export const SchoolDetailPage: React.FC = () => {
     window.scrollTo(0, 0);
   }, [id]);
 
+  // Check group code unlock state when school changes
+  useEffect(() => {
+    if (school) {
+      const authKey = `supertour_auth_${school.id}`;
+      if (sessionStorage.getItem(authKey) === 'true') {
+        setIsUnlocked(true);
+      } else if (!school.group_code || school.group_code.trim() === '') {
+        setIsUnlocked(true);
+      } else {
+        setIsUnlocked(false);
+      }
+    }
+  }, [school]);
+
+  const handleVerifyPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!school) return;
+
+    const expected = (school.group_code || '').trim().toUpperCase();
+    const entered = pinInput.trim().toUpperCase();
+
+    if (entered && entered === expected) {
+      sessionStorage.setItem(`supertour_auth_${school.id}`, 'true');
+      setIsUnlocked(true);
+      setPinError(null);
+    } else {
+      setPinError('El código ingresado no coincide con este grupo. Verificá el código enviado por WhatsApp a tu grupo.');
+      setShakePin(true);
+      setTimeout(() => setShakePin(false), 600);
+    }
+  };
+
   useEffect(() => {
     const loadSurvey = async () => {
       try {
@@ -483,6 +523,101 @@ export const SchoolDetailPage: React.FC = () => {
     );
   }
 
+  // Security Gate Screen if not unlocked
+  if (!isUnlocked) {
+    return (
+      <div className="min-h-screen bg-black text-white relative overflow-x-hidden flex flex-col justify-between w-full">
+        <Navbar />
+
+        {/* Decorative Blur lights */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[600px] bg-gradient-to-b from-primary/10 via-transparent to-transparent blur-[120px] pointer-events-none z-0" />
+
+        <div className="max-w-md mx-auto w-full px-4 pt-36 pb-20 relative z-10 flex-1 flex flex-col justify-center">
+          <div className={`glass-card rounded-3xl border border-zinc-800/80 p-8 bg-zinc-950/90 shadow-2xl backdrop-blur-md text-center ${shakePin ? 'animate-[shake_0.4s]' : ''}`}>
+            {/* Lock Icon */}
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-5 glow-yellow">
+              <Lock size={28} className="text-primary" />
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest mb-3">
+              <Sparkles size={10} />
+              Acceso Privado al Grupo
+            </div>
+
+            <h1 className="text-xl sm:text-2xl font-black uppercase text-white tracking-tight">
+              {school.name}
+            </h1>
+
+            {school.school_names && school.school_names.length > 1 && (
+              <div className="flex flex-wrap gap-1.5 justify-center mt-2.5">
+                {school.school_names.map((sName, idx) => (
+                  <span key={idx} className="inline-flex items-center text-[10px] font-bold text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md uppercase">
+                    {sName}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center justify-center gap-2 text-xs text-zinc-400 mt-2 font-medium">
+              <span>{school.destination}</span>
+              <span>•</span>
+              <span>{formatDate(school.travel_date)}</span>
+            </div>
+
+            <p className="text-xs text-zinc-400 mt-4 leading-relaxed">
+              Ingresá el <strong className="text-white">Código de Grupo</strong> enviado por WhatsApp para desbloquear y ver las fotos y videos oficiales de este viaje.
+            </p>
+
+            {/* Error Message */}
+            {pinError && (
+              <div className="mt-4 p-3.5 rounded-xl bg-red-950/50 border border-red-900/60 text-red-400 text-xs text-left flex items-start gap-2.5 animate-fade-in">
+                <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                <span className="leading-snug">{pinError}</span>
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleVerifyPin} className="mt-6 space-y-4">
+              <div>
+                <input
+                  type="text"
+                  autoFocus
+                  maxLength={12}
+                  value={pinInput}
+                  onChange={(e) => {
+                    setPinInput(e.target.value);
+                    if (pinError) setPinError(null);
+                  }}
+                  placeholder="EJ: 0001"
+                  className="w-full text-center text-2xl font-mono font-black uppercase tracking-widest py-3.5 px-4 rounded-xl bg-zinc-900 border border-zinc-700 focus:border-primary text-white focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all shadow-inner placeholder:text-zinc-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={!pinInput.trim()}
+                className="w-full py-4 rounded-xl bg-primary hover:bg-primary/95 text-black font-black uppercase text-xs tracking-widest transition-all glow-yellow disabled:opacity-40 disabled:scale-95 disabled:hover:bg-primary shadow-lg cursor-pointer"
+              >
+                Ingresar a la Galería
+              </button>
+            </form>
+
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="mt-6 flex items-center justify-center gap-1.5 text-zinc-500 hover:text-white text-xs font-bold uppercase tracking-wider transition-colors w-full"
+            >
+              <ArrowLeft size={14} />
+              Volver al Calendario
+            </button>
+          </div>
+        </div>
+
+        <Footer />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-black text-white relative overflow-x-hidden w-full">
       <Navbar />
@@ -543,9 +678,9 @@ export const SchoolDetailPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Quick Actions (Downloads) */}
-            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-              {groupVideos.length > 0 && (
+            {/* Quick Actions (Videos scroll if available) */}
+            {groupVideos.length > 0 && (
+              <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
                 <button
                   onClick={() => document.getElementById('seccion-videos')?.scrollIntoView({ behavior: 'smooth' })}
                   className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 font-black text-xs uppercase tracking-wider text-white transition-all duration-300 w-full sm:w-auto"
@@ -553,18 +688,8 @@ export const SchoolDetailPage: React.FC = () => {
                   <Film size={16} className="text-primary" />
                   Ver Videos ({groupVideos.length})
                 </button>
-              )}
-              
-              {activeGroupPhoto && (activeGroupPhoto.url_hd || activeGroupPhoto.url_web) && (
-                <button
-                  onClick={() => downloadFileDirectly(activeGroupPhoto.url_hd || activeGroupPhoto.url_web || school.group_photo_hd, `SuperTour-${school.name}-FotoGrupal.jpg`)}
-                  className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-all duration-300 w-full sm:w-auto glow-yellow"
-                >
-                  <Download size={16} />
-                  Descargar Foto Grupal HD
-                </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
