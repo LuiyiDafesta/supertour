@@ -400,14 +400,6 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
                       className="group flex items-center justify-between p-4 rounded-xl bg-zinc-900/60 border border-zinc-800/80 hover:border-primary/40 hover:bg-zinc-900 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-[0_4px_20px_rgba(250,204,21,0.05)] transform hover:-translate-y-0.5"
                     >
                       <div className="flex items-center gap-4">
-                        {/* School Preview thumbnail */}
-                        <div className="w-12 h-12 rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 flex-shrink-0">
-                          <img
-                            src={toCdnUrl(school.group_photo_web)}
-                            alt={school.name}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                          />
-                        </div>
                         <div>
                           {school.school_names && school.school_names.length > 0 ? (
                             <div className="flex flex-wrap gap-1.5 mb-1">

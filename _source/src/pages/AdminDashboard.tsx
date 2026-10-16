@@ -1779,9 +1779,6 @@ export const AdminDashboard: React.FC = () => {
               <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent pointer-events-none" />
               
               <div className="flex flex-col sm:flex-row items-center gap-4.5 z-10">
-                <div className="w-16 h-16 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900 flex-shrink-0 shadow-md">
-                  <img src={toCdnUrl(viewingGallerySchool.group_photo_web)} alt={viewingGallerySchool.name} className="w-full h-full object-cover" />
-                </div>
                 <div className="text-center sm:text-left">
                   <span className="text-[9px] font-black text-primary uppercase tracking-widest block mb-1">
                     Administrando Galería del Grupo
