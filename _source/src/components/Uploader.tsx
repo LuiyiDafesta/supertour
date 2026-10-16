@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Upload, X, Check, AlertCircle, BarChart2, ShieldCheck, RotateCcw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { compressImage } from '../lib/imageCompressor';
+import { toCdnUrl } from '../lib/cdn';
 
 interface FileQueueItem {
   id: string;
@@ -169,12 +170,15 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, onUploa
         }
 
         // 3. Registrar Foto en la tabla 'gallery_photos'
-        const finalWebUrl = subSchool 
+        const rawWeb = subSchool 
           ? `${webUrl}?sub=${encodeURIComponent(subSchool)}` 
           : webUrl;
-        const finalHdUrl = subSchool 
+        const rawHd = subSchool 
           ? `${hdUrl}?sub=${encodeURIComponent(subSchool)}` 
           : hdUrl;
+
+        const finalWebUrl = toCdnUrl(rawWeb);
+        const finalHdUrl = toCdnUrl(rawHd);
 
         const { error: dbError } = await supabase
           .from('gallery_photos')

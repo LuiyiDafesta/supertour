@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { School, GalleryPhoto, SchoolItem } from '../types/database';
+import { School, GalleryPhoto, SchoolItem, GroupVideo } from '../types/database';
 import { Navbar } from '../components/Navbar';
 import { Uploader } from '../components/Uploader';
 import { getAnalyticsEvents, AnalyticsEvent } from '../lib/analytics';
+import { toCdnUrl, normalizeSchoolWithCdn, normalizeGalleryPhotoWithCdn, getSchoolVideos } from '../lib/cdn';
+import { downloadFileDirectly } from '../lib/downloader';
 import { 
   Plus, 
   Trash2, 
@@ -28,7 +30,13 @@ import {
   SlidersHorizontal,
   Mail,
   Phone,
-  Eye
+  Eye,
+  Download,
+  Play,
+  Star,
+  Link as LinkIcon,
+  ExternalLink,
+  ZoomIn
 } from 'lucide-react';
 import { useSEO } from '../hooks/useSEO';
 import { compressImage } from '../lib/imageCompressor';
@@ -78,6 +86,13 @@ export const AdminDashboard: React.FC = () => {
   const [videoUploading, setVideoUploading] = useState(false);
   const [videoProgress, setVideoProgress] = useState(0);
   const [videoStatus, setVideoStatus] = useState<string | null>(null);
+
+  // Group Gallery Modals & Inputs
+  const [previewPhotoModal, setPreviewPhotoModal] = useState<GalleryPhoto | null>(null);
+  const [previewVideoModal, setPreviewVideoModal] = useState<{ title: string; url: string } | null>(null);
+  const [showAddVideoUrl, setShowAddVideoUrl] = useState(false);
+  const [newVideoTitle, setNewVideoTitle] = useState('');
+  const [newVideoUrl, setNewVideoUrl] = useState('');
 
   // Tab Selector State
   const [activeTab, setActiveTab] = useState<'colegios' | 'encuestas' | 'metricas'>('colegios');
@@ -207,7 +222,7 @@ export const AdminDashboard: React.FC = () => {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        setSchools(data as School[]);
+        setSchools((data as School[]).map(normalizeSchoolWithCdn));
       } else {
         setSchools(mockSchools);
       }
@@ -354,7 +369,7 @@ export const AdminDashboard: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setGalleryPhotos(data as GalleryPhoto[] || []);
+      setGalleryPhotos(((data as GalleryPhoto[]) || []).map(normalizeGalleryPhotoWithCdn));
     } catch (err) {
       console.warn('DB Error loading photos, using empty array locally.');
       // En modo simulado offline de desarrollo, generamos placeholders para este colegio
@@ -409,7 +424,7 @@ export const AdminDashboard: React.FC = () => {
         if (!resWeb.ok) throw new Error('Error al subir versión Web');
         const dataWeb = await resWeb.json();
         if (!dataWeb.success) throw new Error(dataWeb.error || 'Fallo de subida');
-        webUrl = dataWeb.url;
+        webUrl = toCdnUrl(dataWeb.url);
 
         setGroupPhotoProgress(65);
         setGroupPhotoStatus('Subiendo versión HD...');
@@ -423,7 +438,7 @@ export const AdminDashboard: React.FC = () => {
         if (!resHd.ok) throw new Error('Error al subir versión HD');
         const dataHd = await resHd.json();
         if (!dataHd.success) throw new Error(dataHd.error || 'Fallo de subida');
-        hdUrl = dataHd.url;
+        hdUrl = toCdnUrl(dataHd.url);
 
         setGroupPhotoProgress(100);
         setGroupPhotoStatus('Éxito ✅');
@@ -480,8 +495,8 @@ export const AdminDashboard: React.FC = () => {
 
         setVideoProgress(100);
         setVideoStatus('Éxito ✅');
-        setMultimediaUrl(data.url);
-        setSuccessMsg('Archivo multimedia cargado con éxito en Backblaze B2.');
+        setMultimediaUrl(toCdnUrl(data.url));
+        setSuccessMsg('Archivo multimedia cargado con éxito en CDN / Backblaze B2.');
       } catch (uploadError) {
         console.warn('Subida real de video falló, usando simulación de desarrollo:', uploadError);
         // Simulación offline en desarrollo
@@ -498,6 +513,298 @@ export const AdminDashboard: React.FC = () => {
     } finally {
       setVideoUploading(false);
     }
+  };
+
+  // --- GESTIÓN DE FOTOS GRUPALES (NIVEL GRUPO) ---
+  const handleUploadGroupPhotos = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !viewingGallerySchool) return;
+
+    setGroupPhotoUploading(true);
+    setGroupPhotoProgress(5);
+    setGroupPhotoStatus('Iniciando subida...');
+    setErrorMsg(null);
+
+    const totalFiles = files.length;
+    let completedCount = 0;
+    const uploadedPhotos: GalleryPhoto[] = [];
+
+    try {
+      for (let i = 0; i < totalFiles; i++) {
+        const file = files[i];
+        setGroupPhotoStatus(`Procesando foto grupal ${i + 1} de ${totalFiles}...`);
+        
+        // 1. Comprimir en cliente a resolución HD para web
+        const compressed = await compressImage(file, 1600, 0.82);
+        const timestamp = Date.now();
+        const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+        const remotePathWeb = `group-photos/web/${timestamp}-${cleanName}`;
+        const remotePathHd = `group-photos/hd/${timestamp}-${cleanName}`;
+
+        let webUrl = '';
+        let hdUrl = '';
+
+        try {
+          // Subir versión Web comprimida
+          const formDataWeb = new FormData();
+          formDataWeb.append('file', compressed);
+          formDataWeb.append('filename', remotePathWeb);
+          const resWeb = await fetch('/upload.php', { method: 'POST', body: formDataWeb });
+          const dataWeb = await resWeb.json();
+          webUrl = toCdnUrl(dataWeb.url);
+
+          // Subir versión HD original
+          const formDataHd = new FormData();
+          formDataHd.append('file', file);
+          formDataHd.append('filename', remotePathHd);
+          const resHd = await fetch('/upload.php', { method: 'POST', body: formDataHd });
+          const dataHd = await resHd.json();
+          hdUrl = toCdnUrl(dataHd.url);
+        } catch (uploadErr) {
+          console.warn('Subida real falló, usando simulación offline:', uploadErr);
+          webUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&sig=${timestamp}-${i}`;
+          hdUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1600&sig=${timestamp}-${i}`;
+        }
+
+        // 2. Guardar en Supabase gallery_photos con categoría 'Grupal'
+        try {
+          const { data, error } = await supabase
+            .from('gallery_photos')
+            .insert({
+              school_id: viewingGallerySchool.id,
+              url_web: webUrl,
+              url_hd: hdUrl,
+              category: 'Grupal',
+              sort_order: i + 1
+            })
+            .select()
+            .single();
+
+          if (!error && data) {
+            uploadedPhotos.push(normalizeGalleryPhotoWithCdn(data as GalleryPhoto));
+          } else {
+            uploadedPhotos.push({
+              id: `gp-offline-${Date.now()}-${i}`,
+              school_id: viewingGallerySchool.id,
+              url_web: webUrl,
+              url_hd: hdUrl,
+              category: 'Grupal',
+              sort_order: i + 1
+            });
+          }
+        } catch {
+          uploadedPhotos.push({
+            id: `gp-offline-${Date.now()}-${i}`,
+            school_id: viewingGallerySchool.id,
+            url_web: webUrl,
+            url_hd: hdUrl,
+            category: 'Grupal',
+            sort_order: i + 1
+          });
+        }
+
+        completedCount++;
+        setGroupPhotoProgress(Math.round((completedCount / totalFiles) * 90));
+      }
+
+      // Si el grupo no tiene una portada o la que tiene es genérica de unsplash, establecer la primera
+      const firstPhoto = uploadedPhotos[0];
+      if (firstPhoto && (!viewingGallerySchool.group_photo_web || viewingGallerySchool.group_photo_web.includes('unsplash.com'))) {
+        try {
+          await supabase.from('schools').update({
+            group_photo_web: firstPhoto.url_web,
+            group_photo_hd: firstPhoto.url_hd
+          }).eq('id', viewingGallerySchool.id);
+        } catch (e) {
+          console.warn('Could not update primary cover in DB:', e);
+        }
+        setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: firstPhoto.url_web, group_photo_hd: firstPhoto.url_hd } : null);
+        setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: firstPhoto.url_web, group_photo_hd: firstPhoto.url_hd } : s));
+      }
+
+      setGroupPhotoProgress(100);
+      setGroupPhotoStatus('¡Fotos cargadas con éxito! ✅');
+      setGalleryPhotos(prev => [...uploadedPhotos, ...prev]);
+      toast.success(`${uploadedPhotos.length} foto(s) grupal(es) agregada(s) correctamente.`);
+    } catch (err: any) {
+      console.error('Error al subir fotos grupales:', err);
+      setErrorMsg(err.message || 'Error al subir fotos grupales');
+      toast.error('Ocurrió un error al subir las fotos grupales.');
+    } finally {
+      setTimeout(() => {
+        setGroupPhotoUploading(false);
+        setGroupPhotoProgress(0);
+        setGroupPhotoStatus(null);
+      }, 1500);
+    }
+  };
+
+  const handleSetCoverPhoto = async (photo: GalleryPhoto) => {
+    if (!viewingGallerySchool) return;
+    try {
+      const { error } = await supabase.from('schools').update({
+        group_photo_web: photo.url_web,
+        group_photo_hd: photo.url_hd
+      }).eq('id', viewingGallerySchool.id);
+      if (error) throw error;
+      toast.success('Foto establecida como Portada Oficial del Grupo.');
+    } catch (err) {
+      console.warn('DB update cover failed, updating locally:', err);
+      toast.success('[Modo Offline] Foto definida como portada localmente.');
+    }
+    setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: photo.url_web, group_photo_hd: photo.url_hd } : null);
+    setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: photo.url_web, group_photo_hd: photo.url_hd } : s));
+  };
+
+  const handleDeleteGroupPhoto = async (photo: GalleryPhoto) => {
+    if (!window.confirm('¿Estás seguro de eliminar esta foto grupal oficial?')) return;
+    try {
+      await supabase.from('gallery_photos').delete().eq('id', photo.id);
+      toast.success('Foto grupal eliminada.');
+    } catch (err) {
+      console.warn('DB delete photo failed, removing locally:', err);
+      toast.success('Foto grupal removida localmente.');
+    }
+    setGalleryPhotos(prev => prev.filter(p => p.id !== photo.id));
+    
+    // Si era la portada, actualizar a otra foto grupal restante si existe
+    if (viewingGallerySchool && viewingGallerySchool.group_photo_web === photo.url_web) {
+      const remainingGroupPhotos = galleryPhotos.filter(p => p.category === 'Grupal' && p.id !== photo.id);
+      const nextCover = remainingGroupPhotos[0];
+      const newWeb = nextCover ? nextCover.url_web : '';
+      const newHd = nextCover ? nextCover.url_hd : '';
+      try {
+        await supabase.from('schools').update({ group_photo_web: newWeb, group_photo_hd: newHd }).eq('id', viewingGallerySchool.id);
+      } catch {}
+      setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: newWeb, group_photo_hd: newHd } : null);
+      setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: newWeb, group_photo_hd: newHd } : s));
+    }
+  };
+
+  // --- GESTIÓN DE VIDEOS (NIVEL GRUPO) ---
+  const handleUploadGroupVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !viewingGallerySchool) return;
+
+    setVideoUploading(true);
+    setVideoProgress(15);
+    setVideoStatus('Preparando archivo multimedia...');
+    setErrorMsg(null);
+
+    try {
+      const timestamp = Date.now();
+      const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+      const remotePath = `multimedia/${timestamp}-${cleanName}`;
+
+      setVideoProgress(35);
+      setVideoStatus(`Subiendo ${file.name}...`);
+
+      let videoUrl = '';
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('filename', remotePath);
+        const res = await fetch('/upload.php', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Error al subir video');
+        videoUrl = toCdnUrl(data.url);
+      } catch (uploadErr) {
+        console.warn('Upload error, using fallback:', uploadErr);
+        videoUrl = `https://demo.backblaze.com/download/viaje-${timestamp}.zip`;
+      }
+
+      setVideoProgress(85);
+      setVideoStatus('Guardando en el grupo...');
+
+      const currentVideos = getSchoolVideos(viewingGallerySchool);
+      const newVid: GroupVideo = {
+        id: `vid-${timestamp}`,
+        title: file.name.replace(/\.[^/.]+$/, ""),
+        url: videoUrl,
+        created_at: new Date().toISOString()
+      };
+      const updatedVideos = [...currentVideos, newVid];
+
+      try {
+        await supabase.from('schools').update({
+          videos: updatedVideos,
+          multimedia_url: updatedVideos[0]?.url || ''
+        }).eq('id', viewingGallerySchool.id);
+      } catch (dbErr) {
+        console.warn('DB update video error, falling back locally:', dbErr);
+      }
+
+      setViewingGallerySchool(prev => prev ? { ...prev, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : null);
+      setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : s));
+      
+      setVideoProgress(100);
+      setVideoStatus('¡Video cargado con éxito! ✅');
+      toast.success('Video / archivo multimedia agregado con éxito al grupo.');
+    } catch (err: any) {
+      console.error('Error al subir video:', err);
+      toast.error('Ocurrió un error al subir el video.');
+    } finally {
+      setTimeout(() => {
+        setVideoUploading(false);
+        setVideoProgress(0);
+        setVideoStatus(null);
+      }, 1500);
+      e.target.value = '';
+    }
+  };
+
+  const handleAddVideoUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newVideoUrl.trim() || !viewingGallerySchool) return;
+
+    const timestamp = Date.now();
+    const currentVideos = getSchoolVideos(viewingGallerySchool);
+    const newVid: GroupVideo = {
+      id: `vid-${timestamp}`,
+      title: newVideoTitle.trim() || `Video #${currentVideos.length + 1}`,
+      url: toCdnUrl(newVideoUrl.trim()),
+      created_at: new Date().toISOString()
+    };
+    const updatedVideos = [...currentVideos, newVid];
+
+    try {
+      await supabase.from('schools').update({
+        videos: updatedVideos,
+        multimedia_url: updatedVideos[0]?.url || ''
+      }).eq('id', viewingGallerySchool.id);
+      toast.success('Video enlazado con éxito al grupo.');
+    } catch (err) {
+      console.warn('Error saving video URL in DB:', err);
+      toast.success('[Modo Offline] Video guardado localmente.');
+    }
+
+    setViewingGallerySchool(prev => prev ? { ...prev, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : null);
+    setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : s));
+    
+    setNewVideoTitle('');
+    setNewVideoUrl('');
+    setShowAddVideoUrl(false);
+  };
+
+  const handleDeleteGroupVideo = async (videoId: string) => {
+    if (!viewingGallerySchool) return;
+    if (!window.confirm('¿Estás seguro de eliminar este video del grupo?')) return;
+
+    const currentVideos = getSchoolVideos(viewingGallerySchool);
+    const updatedVideos = currentVideos.filter(v => v.id !== videoId);
+
+    try {
+      await supabase.from('schools').update({
+        videos: updatedVideos,
+        multimedia_url: updatedVideos[0]?.url || ''
+      }).eq('id', viewingGallerySchool.id);
+      toast.success('Video eliminado del grupo.');
+    } catch (err) {
+      console.warn('Error deleting video in DB:', err);
+      toast.success('Video removido localmente.');
+    }
+
+    setViewingGallerySchool(prev => prev ? { ...prev, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : null);
+    setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : s));
   };
 
   // Manejador para crear o editar una encuesta (Supabase con fallback local)
@@ -815,14 +1122,14 @@ export const AdminDashboard: React.FC = () => {
         formDataWeb.append('filename', remotePathWeb);
         const resWeb = await fetch('/upload.php', { method: 'POST', body: formDataWeb });
         const dataWeb = await resWeb.json();
-        webUrl = dataWeb.url;
+        webUrl = toCdnUrl(dataWeb.url);
 
         const formDataHd = new FormData();
         formDataHd.append('file', file);
         formDataHd.append('filename', remotePathHd);
         const resHd = await fetch('/upload.php', { method: 'POST', body: formDataHd });
         const dataHd = await resHd.json();
-        hdUrl = dataHd.url;
+        hdUrl = toCdnUrl(dataHd.url);
       } catch {
         webUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&sig=${timestamp}`;
         hdUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1600&sig=${timestamp}`;
@@ -850,7 +1157,7 @@ export const AdminDashboard: React.FC = () => {
         formData.append('filename', remotePath);
         const res = await fetch('/upload.php', { method: 'POST', body: formData });
         const data = await res.json();
-        videoUrl = data.url;
+        videoUrl = toCdnUrl(data.url);
       } catch {
         videoUrl = `https://demo.backblaze.com/download/viaje-${timestamp}.zip`;
       }
@@ -876,11 +1183,11 @@ export const AdminDashboard: React.FC = () => {
     const cleanedSchoolNames = cleanedItems.map(item => item.name.trim());
     const displayName = cleanedSchoolNames.length > 0 ? cleanedSchoolNames.join(', ') : (schoolName || 'Grupo Sin Nombre');
 
-    const primaryWebPhoto = cleanedItems[0]?.group_photo_web || groupWebUrl || defaultPhoto;
-    const primaryHdPhoto = cleanedItems[0]?.group_photo_hd || groupHdUrl || defaultPhoto.replace('w=800', 'w=1600');
-    const primaryVideo = cleanedItems[0]?.multimedia_url || multimediaUrl || 'https://demo.backblaze.com/download/viaje.zip';
+    const primaryWebPhoto = editingSchool?.group_photo_web || defaultPhoto;
+    const primaryHdPhoto = editingSchool?.group_photo_hd || defaultPhoto.replace('w=800', 'w=1600');
+    const primaryVideo = editingSchool?.multimedia_url || '';
 
-    const schoolData = {
+    const schoolData: any = {
       group_code: groupCode.trim(),
       school_names: cleanedSchoolNames,
       school_items: cleanedItems,
@@ -891,6 +1198,10 @@ export const AdminDashboard: React.FC = () => {
       group_photo_hd: primaryHdPhoto,
       multimedia_url: primaryVideo
     };
+
+    if (editingSchool?.videos) {
+      schoolData.videos = editingSchool.videos;
+    }
 
     try {
       const isRealEdit = editingSchool && !editingSchool.id.startsWith('offline-school-');
@@ -1339,24 +1650,33 @@ export const AdminDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* VISTA A: GESTOR DE GALERÍA INDIVIDUAL */}
+        {/* VISTA A: GESTOR DE GALERÍA INDIVIDUAL A NIVEL GRUPO */}
         {viewingGallerySchool ? (
-          <div className="space-y-6">
-            {/* Cabecera del Colegio Seleccionado */}
-            <div className="bg-zinc-950 border border-zinc-850 p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden group">
+          <div className="space-y-10">
+            {/* Cabecera del Grupo Seleccionado */}
+            <div className="bg-zinc-950 border border-zinc-850 p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden group shadow-xl">
               <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent pointer-events-none" />
               
               <div className="flex flex-col sm:flex-row items-center gap-4.5 z-10">
-                <div className="w-16 h-16 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900 flex-shrink-0">
-                  <img src={viewingGallerySchool.group_photo_web} alt={viewingGallerySchool.name} className="w-full h-full object-cover" />
+                <div className="w-16 h-16 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900 flex-shrink-0 shadow-md">
+                  <img src={toCdnUrl(viewingGallerySchool.group_photo_web)} alt={viewingGallerySchool.name} className="w-full h-full object-cover" />
                 </div>
                 <div className="text-center sm:text-left">
-                  <span className="text-[9px] font-black text-primary uppercase tracking-widest block mb-1">Administrando Galería</span>
-                  <h2 className="text-2xl font-black uppercase text-white tracking-tight leading-none">{viewingGallerySchool.name}</h2>
-                  <div className="flex items-center justify-center sm:justify-start gap-3 text-[10px] text-zinc-500 mt-2 font-bold uppercase tracking-wider">
-                    <span className="flex items-center gap-0.5"><MapPin size={10} /> {viewingGallerySchool.destination}</span>
+                  <span className="text-[9px] font-black text-primary uppercase tracking-widest block mb-1">
+                    Administrando Galería del Grupo
+                  </span>
+                  <h2 className="text-2xl font-black uppercase text-white tracking-tight leading-none">
+                    {viewingGallerySchool.name}
+                  </h2>
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 text-[10px] text-zinc-500 mt-2 font-bold uppercase tracking-wider">
+                    {viewingGallerySchool.group_code && (
+                      <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-primary font-mono">
+                        CÓDIGO: {viewingGallerySchool.group_code}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-0.5"><MapPin size={11} className="text-primary" /> {viewingGallerySchool.destination}</span>
                     <span>•</span>
-                    <span className="flex items-center gap-0.5"><CalendarIcon size={10} /> {viewingGallerySchool.travel_date}</span>
+                    <span className="flex items-center gap-0.5"><CalendarIcon size={11} className="text-primary" /> {viewingGallerySchool.travel_date}</span>
                   </div>
                 </div>
               </div>
@@ -1364,134 +1684,472 @@ export const AdminDashboard: React.FC = () => {
               <div className="flex items-center gap-2.5 z-10">
                 <button
                   onClick={() => navigate(`/colegio/${viewingGallerySchool.id}`)}
-                  className="px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-bold text-white uppercase tracking-wider transition-colors"
+                  className="px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-xs font-bold text-white uppercase tracking-wider transition-colors flex items-center gap-1.5"
                 >
+                  <Eye size={14} className="text-primary" />
                   Ver Vista Pública
                 </button>
                 <button
                   onClick={() => setViewingGallerySchool(null)}
-                  className="px-4 py-2.5 rounded-xl bg-primary text-black font-black text-xs uppercase tracking-wider transition-colors glow-yellow"
+                  className="px-4.5 py-2.5 rounded-xl bg-primary text-black font-black text-xs uppercase tracking-wider transition-colors glow-yellow"
                 >
                   ← Volver a Colegios
                 </button>
               </div>
             </div>
 
-            {/* Define filtered photos for individual school groups in gallery */}
             {(() => {
-              const filteredGalleryPhotos = galleryPhotos.filter(p => {
-                if (selectedSubSchool === 'General') return true;
-                if (!p.url_web) return true;
-                try {
-                  const url = new URL(p.url_web);
-                  const sub = url.searchParams.get('sub');
-                  return sub === selectedSubSchool;
-                } catch {
-                  return true;
-                }
-              });
+              const allGroupPhotos = galleryPhotos.filter(p => p.category === 'Grupal');
+              const groupPhotos = allGroupPhotos.length > 0 
+                ? allGroupPhotos 
+                : (viewingGallerySchool.group_photo_web && !viewingGallerySchool.group_photo_web.includes('unsplash.com') 
+                    ? [{
+                        id: 'cover-primary',
+                        school_id: viewingGallerySchool.id,
+                        url_web: viewingGallerySchool.group_photo_web,
+                        url_hd: viewingGallerySchool.group_photo_hd || viewingGallerySchool.group_photo_web,
+                        category: 'Grupal',
+                        sort_order: 1
+                      } as GalleryPhoto]
+                    : []);
+
+              const groupVideos = getSchoolVideos(viewingGallerySchool);
+              const tripPhotos = galleryPhotos.filter(p => p.category !== 'Grupal');
 
               return (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                  <div className="lg:col-span-5">
-                    <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-4">
-                      <h3 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-1.5 leading-none">
-                        <CloudUpload size={14} />
-                        Cargar Nuevas Fotos
-                      </h3>
-                      <p className="text-[10px] text-zinc-500 uppercase leading-relaxed font-semibold">
-                        Las fotos se procesarán de inmediato en tu navegador. La versión reducida (Web) y la versión original (HD) se subirán de forma directa a tu bucket de Backblaze B2.
-                      </p>
-
-                      {/* Dropdown de Sub-colegios en lote */}
-                      {viewingGallerySchool.school_items && viewingGallerySchool.school_items.length > 1 && (
-                        <div className="space-y-1.5 p-3 rounded-xl bg-zinc-900 border border-zinc-800 select-none">
-                          <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block leading-none">
-                            Asociar fotos a un Colegio:
-                          </label>
-                          <select
-                            value={selectedSubSchool}
-                            onChange={(e) => setSelectedSubSchool(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-850 focus:border-primary/50 text-white text-[10px] font-bold focus:outline-none uppercase"
-                          >
-                            <option value="General">General (Todas las escuelas del grupo)</option>
-                            {viewingGallerySchool.school_items.map((sItem, idx) => (
-                              <option key={sItem.id || idx} value={sItem.name}>
-                                {sItem.name}
-                              </option>
-                            ))}
-                          </select>
+                <div className="space-y-10">
+                  {/* ============================================================== */}
+                  {/* SECCIÓN 1: GALERÍA DE FOTOS GRUPALES (A NIVEL DE GRUPO)        */}
+                  {/* ============================================================== */}
+                  <div className="bg-zinc-950 border border-zinc-850 p-6 sm:p-7 rounded-3xl space-y-6 shadow-premium relative overflow-hidden">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-900">
+                      <div>
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest mb-1.5">
+                          <Sparkles size={11} /> Nivel de Grupo
                         </div>
-                      )}
-
-                      <Uploader
-                        schoolId={viewingGallerySchool.id}
-                        subSchool={selectedSubSchool !== 'General' ? selectedSubSchool : undefined}
-                        onUploadComplete={() => loadSchoolPhotos(viewingGallerySchool.id)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Grid de Fotos cargadas */}
-                  <div className="lg:col-span-7">
-                    <div className="bg-zinc-950 border border-zinc-850 p-5 rounded-2xl space-y-4.5">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 border-b border-zinc-900 gap-3">
-                        <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5 leading-none">
-                          <ImageIcon size={14} />
-                          Fotos Registradas ({filteredGalleryPhotos.length})
+                        <h3 className="text-lg font-black uppercase tracking-tight text-white flex items-center gap-2">
+                          <ImageIcon size={18} className="text-primary" />
+                          Galería de Fotos Grupales ({groupPhotos.length})
                         </h3>
-
-                        {/* Filtro rápido por colegio en lista */}
-                        {viewingGallerySchool.school_items && viewingGallerySchool.school_items.length > 1 && (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[8px] font-black uppercase text-zinc-500 leading-none">Ver:</span>
-                            <select
-                              value={selectedSubSchool}
-                              onChange={(e) => setSelectedSubSchool(e.target.value)}
-                              className="px-2 py-1 rounded bg-zinc-900 border border-zinc-800 text-white text-[9px] focus:outline-none uppercase font-bold"
-                            >
-                              <option value="General">Todas</option>
-                              {viewingGallerySchool.school_items.map((sItem, idx) => (
-                                <option key={sItem.id || idx} value={sItem.name}>
-                                  {sItem.name.substring(0, 18)}...
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
+                        <p className="text-xs text-zinc-400 mt-0.5 font-medium">
+                          Podés subir 1 o más fotos grupales oficiales en HD. Los egresados podrán descargarlas en máxima resolución.
+                        </p>
                       </div>
 
-                      {loadingPhotos ? (
-                        <div className="text-center py-20 text-xs text-zinc-500 font-bold uppercase tracking-wider animate-pulse">Cargando fotos del colegio...</div>
-                      ) : filteredGalleryPhotos.length === 0 ? (
-                        <div className="text-center py-20 border border-dashed border-zinc-850 rounded-xl bg-zinc-900/10 text-zinc-600">
-                          <ImageIcon size={28} className="mx-auto text-zinc-800 mb-2 animate-bounce" />
-                          <p className="text-xs font-bold uppercase tracking-wider">No hay fotos registradas</p>
-                          <p className="text-[10px] uppercase mt-1">
-                            {selectedSubSchool === 'General' 
-                              ? 'Utilizá el panel de la izquierda para subir fotos.' 
-                              : `No hay fotos subidas específicamente para "${selectedSubSchool}".`}
-                          </p>
+                      {/* Botón de carga múltiple de Fotos Grupales */}
+                      <label className="inline-flex items-center gap-2 px-4.5 py-2.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-all duration-300 cursor-pointer glow-yellow flex-shrink-0">
+                        <CloudUpload size={16} />
+                        <span>Subir Fotos Grupales HD</span>
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          disabled={groupPhotoUploading}
+                          onChange={(e) => {
+                            handleUploadGroupPhotos(e.target.files);
+                            e.target.value = '';
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {/* Barra de progreso de fotos grupales */}
+                    {groupPhotoUploading && (
+                      <div className="p-4 rounded-2xl bg-zinc-900/60 border border-primary/30 space-y-2 animate-fade-in">
+                        <div className="flex items-center justify-between text-xs font-bold text-primary uppercase">
+                          <span>{groupPhotoStatus || 'Cargando fotos grupales...'}</span>
+                          <span>{groupPhotoProgress}%</span>
                         </div>
-                      ) : (
-                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[500px] overflow-y-auto pr-1 scrollbar-thin">
-                          {filteredGalleryPhotos.map((photo, idx) => (
-                            <div key={photo.id} className="group relative aspect-square rounded-xl overflow-hidden border border-zinc-850 bg-zinc-900/20">
-                              <img src={photo.url_web} alt="galería" className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex flex-col justify-between p-2.5 transition-opacity">
-                                <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Foto #{idx + 1}</span>
+                        <div className="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="bg-primary h-full transition-all duration-300 rounded-full glow-yellow"
+                            style={{ width: `${groupPhotoProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Grilla de Fotos Grupales */}
+                    {groupPhotos.length === 0 ? (
+                      <div className="text-center py-12 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-500 space-y-2">
+                        <ImageIcon size={32} className="mx-auto text-zinc-700 animate-pulse" />
+                        <p className="text-xs font-black uppercase tracking-wider text-zinc-400">
+                          Aún no se han subido fotos grupales oficiales
+                        </p>
+                        <p className="text-[11px] text-zinc-500 max-w-md mx-auto">
+                          Hacé clic en <span className="text-primary font-bold">"Subir Fotos Grupales HD"</span> para cargar una o varias fotos grupales del grupo.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {groupPhotos.map((photo, idx) => {
+                          const isCover = photo.url_web === viewingGallerySchool.group_photo_web || 
+                            photo.url_hd === viewingGallerySchool.group_photo_hd ||
+                            (idx === 0 && !viewingGallerySchool.group_photo_web);
+
+                          return (
+                            <div
+                              key={photo.id || idx}
+                              className={`group relative rounded-2xl overflow-hidden border transition-all duration-300 bg-zinc-900/30 ${
+                                isCover ? 'border-primary shadow-[0_0_20px_rgba(250,204,21,0.15)] ring-1 ring-primary/40' : 'border-zinc-800 hover:border-zinc-700'
+                              }`}
+                            >
+                              <div className="aspect-[16/10] w-full overflow-hidden relative bg-black">
+                                <img
+                                  src={toCdnUrl(photo.url_web || photo.url_hd)}
+                                  alt={`Foto Grupal #${idx + 1}`}
+                                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                />
+
+                                {/* Badges */}
+                                <div className="absolute top-3 left-3 z-10">
+                                  <span className="px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-md border border-zinc-800 text-[10px] font-black text-white uppercase tracking-wider">
+                                    Foto Grupal #{idx + 1}
+                                  </span>
+                                </div>
+
+                                {isCover && (
+                                  <div className="absolute top-3 right-3 z-10">
+                                    <span className="px-2.5 py-1 rounded-lg bg-primary text-black text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-md">
+                                      <Star size={11} className="fill-black" /> Portada Oficial
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Overlay de hover con acciones rápidas */}
+                                <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-between p-3.5 z-20">
+                                  <div className="flex justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewPhotoModal(photo)}
+                                      className="p-2 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 text-white border border-zinc-700 transition-colors"
+                                      title="Ver foto en tamaño completo"
+                                    >
+                                      <ZoomIn size={14} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => downloadFileDirectly(photo.url_hd || photo.url_web, `SuperTour-${viewingGallerySchool.name}-Grupal-${idx + 1}.jpg`)}
+                                      className="p-2 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 text-primary border border-zinc-700 transition-colors"
+                                      title="Descargar Foto en HD"
+                                    >
+                                      <Download size={14} />
+                                    </button>
+                                    {!photo.id.startsWith('cover-') && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteGroupPhoto(photo)}
+                                        className="p-2 rounded-lg bg-red-950/80 hover:bg-red-600 text-red-300 hover:text-white border border-red-900 transition-colors"
+                                        title="Eliminar foto grupal"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <div className="pt-2">
+                                    {!isCover && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSetCoverPhoto(photo)}
+                                        className="w-full py-2 px-3 rounded-xl bg-primary text-black font-black text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 hover:bg-primary/95 transition-all shadow-md"
+                                      >
+                                        <Star size={12} />
+                                        Establecer como Portada
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ============================================================== */}
+                  {/* SECCIÓN 2: GALERÍA DE VIDEOS (DEBAJO DE FOTOS GRUPALES)        */}
+                  {/* ============================================================== */}
+                  <div className="bg-zinc-950 border border-zinc-850 p-6 sm:p-7 rounded-3xl space-y-6 shadow-premium relative overflow-hidden">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-900">
+                      <div>
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 text-[10px] font-black uppercase tracking-widest mb-1.5">
+                          <Film size={11} className="text-primary" /> Opcional
+                        </div>
+                        <h3 className="text-lg font-black uppercase tracking-tight text-white flex items-center gap-2">
+                          <Film size={18} className="text-primary" />
+                          Galería de Videos del Grupo ({groupVideos.length})
+                        </h3>
+                        <p className="text-xs text-zinc-400 mt-0.5 font-medium">
+                          Podés subir archivos de video (.mp4/.mov), archivos comprimidos (.zip) o enlazar URLs de descarga directa (0 o varios videos).
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        {/* Botón para subir archivo de video / zip */}
+                        <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-200 hover:text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer">
+                          <Film size={15} className="text-primary" />
+                          <span>Subir Video / ZIP</span>
+                          <input
+                            type="file"
+                            accept="video/*,application/zip,application/x-zip-compressed"
+                            disabled={videoUploading}
+                            onChange={handleUploadGroupVideo}
+                            className="hidden"
+                          />
+                        </label>
+
+                        {/* Botón para enlazar URL externa o manual */}
+                        <button
+                          type="button"
+                          onClick={() => setShowAddVideoUrl(!showAddVideoUrl)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary font-black text-xs uppercase tracking-wider transition-colors"
+                        >
+                          <LinkIcon size={14} />
+                          <span>{showAddVideoUrl ? 'Cancelar' : 'Enlazar URL'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Formulario desplegable para Enlazar URL */}
+                    {showAddVideoUrl && (
+                      <form onSubmit={handleAddVideoUrl} className="p-5 rounded-2xl bg-zinc-900/60 border border-primary/30 space-y-4 animate-fade-in">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black uppercase tracking-wider text-primary flex items-center gap-1.5">
+                            <LinkIcon size={13} /> Agregar Video por Enlace Directo
+                          </span>
+                          <span className="text-[10px] text-zinc-400">Backblaze B2, Google Drive, YouTube, CDN, etc.</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
+                              Título del Video
+                            </label>
+                            <input
+                              type="text"
+                              value={newVideoTitle}
+                              onChange={(e) => setNewVideoTitle(e.target.value)}
+                              placeholder="Ej: Video Oficial de Pekos / Fiesta de Bienvenida"
+                              className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs font-bold focus:outline-none focus:border-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
+                              URL Directa del Archivo *
+                            </label>
+                            <input
+                              type="url"
+                              required
+                              value={newVideoUrl}
+                              onChange={(e) => setNewVideoUrl(e.target.value)}
+                              placeholder="https://media.supertourchannel.com.ar/video.mp4"
+                              className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs font-mono focus:outline-none focus:border-primary"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowAddVideoUrl(false)}
+                            className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 text-xs font-bold uppercase"
+                          >
+                            Cerrar
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-5 py-2 rounded-xl bg-primary text-black text-xs font-black uppercase tracking-wider glow-yellow"
+                          >
+                            Guardar Video en el Grupo
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {/* Barra de progreso de subida de video */}
+                    {videoUploading && (
+                      <div className="p-4 rounded-2xl bg-zinc-900/60 border border-primary/30 space-y-2 animate-fade-in">
+                        <div className="flex items-center justify-between text-xs font-bold text-primary uppercase">
+                          <span>{videoStatus || 'Subiendo archivo multimedia...'}</span>
+                          <span>{videoProgress}%</span>
+                        </div>
+                        <div className="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="bg-primary h-full transition-all duration-300 rounded-full glow-yellow"
+                            style={{ width: `${videoProgress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Lista / Grilla de Videos cargados */}
+                    {groupVideos.length === 0 ? (
+                      <div className="text-center py-10 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-500 space-y-1.5">
+                        <Film size={30} className="mx-auto text-zinc-700" />
+                        <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                          No hay videos cargados para este grupo (opcional)
+                        </p>
+                        <p className="text-[11px] text-zinc-500 max-w-md mx-auto">
+                          Si disponés de filmaciones o archivo ZIP con recuerdos del viaje, podés subirlo o enlazarlo en cualquier momento.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {groupVideos.map((vid, vIdx) => {
+                          const isZip = vid.url.toLowerCase().endsWith('.zip');
+                          const isVideoFile = vid.url.toLowerCase().match(/\.(mp4|webm|mov|m4v)(\?.*)?$/i);
+
+                          return (
+                            <div
+                              key={vid.id || vIdx}
+                              className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800 hover:border-zinc-700 transition-all space-y-3.5 flex flex-col justify-between"
+                            >
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-primary">
+                                    {isZip ? <Layers size={16} /> : <Film size={16} />}
+                                  </span>
+                                  <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-zinc-950 text-zinc-400 border border-zinc-850">
+                                    {isZip ? 'ARCHIVO ZIP' : isVideoFile ? 'VIDEO HD' : 'ENLACE'}
+                                  </span>
+                                </div>
+                                <h4 className="text-sm font-black uppercase text-white tracking-tight line-clamp-1" title={vid.title}>
+                                  {vid.title}
+                                </h4>
+                                <p className="text-[10px] text-zinc-500 font-mono truncate" title={vid.url}>
+                                  {vid.url}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-850/70">
+                                <div className="flex items-center gap-1.5">
+                                  {isVideoFile && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewVideoModal({ title: vid.title, url: vid.url })}
+                                      className="px-3 py-1.5 rounded-lg bg-primary text-black font-black text-[10px] uppercase tracking-wider flex items-center gap-1 hover:bg-primary/95 transition-colors glow-yellow"
+                                    >
+                                      <Play size={11} className="fill-black" />
+                                      Ver
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => downloadFileDirectly(vid.url, `${vid.title || 'Video'}${isZip ? '.zip' : '.mp4'}`)}
+                                    className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white font-bold text-[10px] uppercase tracking-wider flex items-center gap-1 transition-colors"
+                                  >
+                                    <Download size={11} />
+                                    Descargar
+                                  </button>
+                                </div>
+
                                 <button
-                                  onClick={() => handleDeletePhoto(photo.id)}
-                                  className="w-8 h-8 rounded-lg bg-red-950/80 hover:bg-red-650 border border-red-900 text-red-400 hover:text-white flex items-center justify-center transition-colors self-end mt-auto"
-                                  title="Eliminar Foto"
+                                  type="button"
+                                  onClick={() => handleDeleteGroupVideo(vid.id)}
+                                  className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/60 text-zinc-500 hover:text-red-400 border border-zinc-800 transition-colors"
+                                  title="Eliminar este video"
                                 >
                                   <Trash2 size={13} />
                                 </button>
                               </div>
                             </div>
-                          ))}
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ============================================================== */}
+                  {/* SECCIÓN 3: GALERÍA DE FOTOS DEL VIAJE (FOTOS COMUNES)          */}
+                  {/* ============================================================== */}
+                  <div className="space-y-6">
+                    <div className="border-b border-zinc-900 pb-3">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest mb-1.5">
+                        <Sparkles size={11} /> Galería General
+                      </div>
+                      <h3 className="text-xl font-black uppercase tracking-tight text-white flex items-center gap-2">
+                        <ImageIcon size={20} className="text-primary" />
+                        Galería de Fotos del Viaje ({tripPhotos.length})
+                      </h3>
+                      <p className="text-xs text-zinc-400 mt-0.5 font-medium">
+                        Fotos comunes de excursiones, fiestas y actividades compartidas por todos los chicos del grupo.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                      {/* Columna Izquierda: Uploader de fotos comunes */}
+                      <div className="lg:col-span-5">
+                        <div className="bg-zinc-950 border border-zinc-850 p-6 rounded-3xl space-y-4 shadow-premium">
+                          <h3 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-1.5 leading-none">
+                            <CloudUpload size={15} />
+                            Cargar Nuevas Fotos
+                          </h3>
+                          <p className="text-[11px] text-zinc-400 uppercase leading-relaxed font-semibold">
+                            Las fotos se procesarán de inmediato en tu navegador. La versión Web reducida y la versión HD se subirán con enrutamiento de CDN Cloudflare.
+                          </p>
+
+                          <Uploader
+                            schoolId={viewingGallerySchool.id}
+                            onUploadComplete={() => loadSchoolPhotos(viewingGallerySchool.id)}
+                          />
                         </div>
-                      )}
+                      </div>
+
+                      {/* Columna Derecha: Fotos Registradas del viaje */}
+                      <div className="lg:col-span-7">
+                        <div className="bg-zinc-950 border border-zinc-850 p-6 rounded-3xl space-y-4.5 shadow-premium">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 border-b border-zinc-900 gap-3">
+                            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-300 flex items-center gap-1.5 leading-none">
+                              <ImageIcon size={14} className="text-primary" />
+                              Fotos del Viaje ({tripPhotos.length})
+                            </h3>
+                          </div>
+
+                          {loadingPhotos ? (
+                            <div className="text-center py-20 text-xs text-zinc-500 font-bold uppercase tracking-wider animate-pulse">
+                              Cargando fotos del viaje...
+                            </div>
+                          ) : tripPhotos.length === 0 ? (
+                            <div className="text-center py-20 border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/10 text-zinc-600 space-y-2">
+                              <ImageIcon size={28} className="mx-auto text-zinc-800 mb-2 animate-bounce" />
+                              <p className="text-xs font-bold uppercase tracking-wider">No hay fotos de actividades registradas</p>
+                              <p className="text-[10px] uppercase mt-1 text-zinc-500">
+                                Utilizá el cargador de la izquierda para arrastrar decenas de fotos de excursiones o fiestas.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[560px] overflow-y-auto pr-1 scrollbar-thin">
+                              {tripPhotos.map((photo, idx) => (
+                                <div key={photo.id || idx} className="group relative aspect-square rounded-xl overflow-hidden border border-zinc-850 bg-zinc-900/20">
+                                  <img src={toCdnUrl(photo.url_web || photo.url_hd)} alt="galería viaje" className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex flex-col justify-between p-2.5 transition-opacity">
+                                    <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">#{idx + 1}</span>
+                                    <div className="flex justify-end gap-1 mt-auto">
+                                      <button
+                                        type="button"
+                                        onClick={() => setPreviewPhotoModal(photo)}
+                                        className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white flex items-center justify-center transition-colors"
+                                        title="Ver foto"
+                                      >
+                                        <ZoomIn size={12} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeletePhoto(photo.id)}
+                                        className="w-7 h-7 rounded-lg bg-red-950/80 hover:bg-red-600 border border-red-900 text-red-300 hover:text-white flex items-center justify-center transition-colors"
+                                        title="Eliminar Foto"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1636,7 +2294,7 @@ export const AdminDashboard: React.FC = () => {
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center gap-3">
                                   <div className="w-10 h-10 rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 flex-shrink-0 relative">
-                                    <img src={school.group_photo_web} alt={school.name} className="w-full h-full object-cover" />
+                                    <img src={toCdnUrl(school.group_photo_web)} alt={school.name} className="w-full h-full object-cover" />
                                   </div>
                                   <div>
                                     <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-primary/10 border border-primary/30 text-primary text-[10px] font-black uppercase tracking-wider glow-yellow">
@@ -2446,7 +3104,7 @@ export const AdminDashboard: React.FC = () => {
                       Colegios Integrantes del Grupo ({schoolItems.length})
                     </label>
                     <span className="text-xs text-zinc-400 font-bold uppercase block mt-1">
-                      Cada colegio posee su foto grupal y video propio. La galería es común a todo el grupo.
+                      Indicá los colegios que viajan juntos. Las fotos grupales, videos y fotos de viaje se administran a nivel grupal desde la pantalla de galería.
                     </span>
                   </div>
                   <button
@@ -2490,97 +3148,6 @@ export const AdminDashboard: React.FC = () => {
                           onChange={(e) => handleUpdateSchoolItem(idx, 'name', e.target.value)}
                           placeholder={`Ej: ${idx === 0 ? 'EGB Colegio San Martín' : 'Instituto Belgrano'}`}
                           className="w-full px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-sm font-bold focus:outline-none"
-                        />
-                      </div>
-
-                      {/* Foto Grupal Oficial de este Colegio */}
-                      <div className="p-4 bg-zinc-950/80 rounded-2xl border border-zinc-850 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
-                            <ImageIcon size={13} className="text-primary" /> Foto Grupal Oficial (HD)
-                          </span>
-                          {item.group_photo_web && (
-                            <span className="text-xs text-emerald-400 font-black uppercase flex items-center gap-1">
-                              <Check size={12} /> Foto Cargada
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <label className="flex-1 py-3 px-4 rounded-xl border border-dashed border-zinc-700 hover:border-primary/50 bg-zinc-900/40 hover:bg-zinc-900 cursor-pointer text-center transition-all">
-                            <span className="text-xs font-black text-zinc-200 uppercase block">
-                              {item.group_photo_web ? '📁 Cambiar Foto Grupal HD' : '☁️ Seleccionar Foto Grupal HD'}
-                            </span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => handleSchoolItemPhotoUpload(idx, e.target.files?.[0])}
-                              className="hidden"
-                            />
-                          </label>
-
-                          {item.group_photo_web && (
-                            <div className="w-14 h-14 rounded-xl border border-zinc-800 overflow-hidden bg-zinc-950 relative group/img flex-shrink-0">
-                              <img src={item.group_photo_web} alt={item.name} className="w-full h-full object-cover" />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  handleUpdateSchoolItem(idx, 'group_photo_web', '');
-                                  handleUpdateSchoolItem(idx, 'group_photo_hd', '');
-                                }}
-                                className="absolute inset-0 bg-black/80 opacity-0 group-hover/img:opacity-100 flex items-center justify-center text-red-400 transition-opacity"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Video / Archivo Zip de este Colegio */}
-                      <div className="p-4 bg-zinc-950/80 rounded-2xl border border-zinc-850 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
-                            <Film size={13} className="text-primary" /> Video / Archivo Zip (Opcional)
-                          </span>
-                          {item.multimedia_url && (
-                            <span className="text-xs text-emerald-400 font-black uppercase flex items-center gap-1">
-                              <Check size={12} /> Video Cargado
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <label className="flex-1 py-3 px-4 rounded-xl border border-dashed border-zinc-700 hover:border-primary/50 bg-zinc-900/40 hover:bg-zinc-900 cursor-pointer text-center transition-all">
-                            <span className="text-xs font-black text-zinc-200 uppercase block truncate">
-                              {item.multimedia_url ? '📁 Cambiar Video/Zip' : '🎥 Seleccionar Video/Zip'}
-                            </span>
-                            <input
-                              type="file"
-                              accept="video/*,application/zip,application/x-zip-compressed"
-                              onChange={(e) => handleSchoolItemVideoUpload(idx, e.target.files?.[0])}
-                              className="hidden"
-                            />
-                          </label>
-
-                          {item.multimedia_url && (
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateSchoolItem(idx, 'multimedia_url', '')}
-                              className="p-3 rounded-xl bg-zinc-900 hover:bg-red-950/50 border border-zinc-800 text-zinc-400 hover:text-red-400 transition-colors flex-shrink-0"
-                              title="Remover Video"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          )}
-                        </div>
-
-                        <input
-                          type="url"
-                          value={item.multimedia_url || ''}
-                          onChange={(e) => handleUpdateSchoolItem(idx, 'multimedia_url', e.target.value)}
-                          placeholder="https://backblaze.com/video.zip (Enlace Manual Directo)"
-                          className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-mono focus:outline-none"
                         />
                       </div>
                     </div>
@@ -2939,6 +3506,99 @@ export const AdminDashboard: React.FC = () => {
               >
                 Cerrar Detalles
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ZOOM / VISTA COMPLETA DE FOTO */}
+      {previewPhotoModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in"
+          onClick={() => setPreviewPhotoModal(null)}
+        >
+          <div 
+            className="relative max-w-5xl w-full bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 flex items-center justify-between border-b border-zinc-900 flex-shrink-0">
+              <span className="text-xs font-black uppercase text-zinc-300 tracking-wider flex items-center gap-2">
+                <ImageIcon size={14} className="text-primary" />
+                Vista Previa en Alta Definición
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => downloadFileDirectly(previewPhotoModal.url_hd || previewPhotoModal.url_web, 'SuperTour-FotoHD.jpg')}
+                  className="px-3 py-1.5 rounded-xl bg-primary text-black font-black text-xs uppercase tracking-wider flex items-center gap-1.5 glow-yellow"
+                >
+                  <Download size={13} />
+                  Descargar HD
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewPhotoModal(null)}
+                  className="p-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-2 flex items-center justify-center bg-black/60">
+              <img
+                src={toCdnUrl(previewPhotoModal.url_hd || previewPhotoModal.url_web)}
+                alt="Vista completa"
+                className="max-h-[75vh] w-auto max-w-full object-contain rounded-xl"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE REPRODUCTOR DE VIDEO */}
+      {previewVideoModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in"
+          onClick={() => setPreviewVideoModal(null)}
+        >
+          <div 
+            className="relative max-w-4xl w-full bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 flex items-center justify-between border-b border-zinc-900">
+              <span className="text-xs font-black uppercase text-white tracking-wider flex items-center gap-2 truncate">
+                <Film size={14} className="text-primary" />
+                {previewVideoModal.title}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => downloadFileDirectly(previewVideoModal.url, `${previewVideoModal.title}.mp4`)}
+                  className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white font-bold text-xs uppercase tracking-wider flex items-center gap-1 border border-zinc-800"
+                >
+                  <Download size={13} />
+                  Descargar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewVideoModal(null)}
+                  className="p-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-3 bg-black flex items-center justify-center">
+              <video
+                controls
+                autoPlay
+                src={previewVideoModal.url}
+                className="w-full max-h-[70vh] rounded-2xl bg-black"
+              >
+                Tu navegador no soporta la reproducción de video HTML5.
+              </video>
             </div>
           </div>
         </div>

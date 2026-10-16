@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GalleryPhoto } from '../types/database';
 import { downloadFileDirectly } from '../lib/downloader';
 import { trackEvent } from '../lib/analytics';
+import { toCdnUrl } from '../lib/cdn';
 import { 
   Download, 
   Share2, 
@@ -80,7 +81,8 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
   const copyPhotoLink = async (photoUrl: string, id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     try {
-      await navigator.clipboard.writeText(photoUrl);
+      const finalUrl = toCdnUrl(photoUrl);
+      await navigator.clipboard.writeText(finalUrl);
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
     } catch (err) {
@@ -91,7 +93,8 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
   // Share via WhatsApp
   const shareOnWhatsApp = (photoUrl: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    const text = encodeURIComponent(`¡Mirá esta foto del viaje de egresados de ${schoolName}! Descargala acá: ` + photoUrl);
+    const finalUrl = toCdnUrl(photoUrl);
+    const text = encodeURIComponent(`¡Mirá esta foto del viaje de egresados de ${schoolName}! Descargala acá: ` + finalUrl);
     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
     setShareSuccess(true);
     setTimeout(() => setShareSuccess(false), 2000);
@@ -184,7 +187,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
                 >
                   {/* Image element */}
                   <img
-                    src={photo.url_web}
+                    src={toCdnUrl(photo.url_web)}
                     alt={`${schoolName} - Recuerdos`}
                     loading="lazy"
                     className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
@@ -413,7 +416,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={photos[lightboxIndex].url_hd}
+              src={toCdnUrl(photos[lightboxIndex].url_hd)}
               alt={`${schoolName} - Lightbox`}
               className={`max-w-full max-h-full object-contain rounded-lg transition-transform duration-300 ${
                 isZoomed ? 'scale-150 cursor-zoom-out' : 'scale-100 cursor-zoom-in'

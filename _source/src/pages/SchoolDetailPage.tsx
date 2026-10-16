@@ -4,9 +4,27 @@ import { supabase } from '../lib/supabase';
 import { School, GalleryPhoto } from '../types/database';
 import { downloadFileDirectly } from '../lib/downloader';
 import { trackEvent } from '../lib/analytics';
+import { toCdnUrl, normalizeSchoolWithCdn, normalizeGalleryPhotoWithCdn, getSchoolVideos } from '../lib/cdn';
 import { Navbar } from '../components/Navbar';
 import { PremiumGallery } from '../components/PremiumGallery';
-import { ArrowLeft, Download, Film, Users, Image as ImageIcon, MapPin, Calendar, Share2, Sparkles, Send, CheckCircle2 } from 'lucide-react';
+import { 
+  ArrowLeft, 
+  Download, 
+  Film, 
+  Users, 
+  Image as ImageIcon, 
+  MapPin, 
+  Calendar, 
+  Share2, 
+  Sparkles, 
+  Send, 
+  CheckCircle2,
+  Play,
+  ZoomIn,
+  X,
+  Star,
+  Layers
+} from 'lucide-react';
 import { Footer } from '../components/Footer';
 import { useSEO } from '../hooks/useSEO';
 
@@ -17,20 +35,34 @@ export const SchoolDetailPage: React.FC = () => {
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [shareText, setShareText] = useState('Compartir');
-  const [selectedSchoolIdx, setSelectedSchoolIdx] = useState(0);
   const [bannerEnabled, setBannerEnabled] = useState(false);
 
-  const activeSchoolItem = school?.school_items && school.school_items.length > 0
-    ? (school.school_items[selectedSchoolIdx] || school.school_items[0])
-    : null;
+  // Group Media State
+  const [activeGroupPhotoIdx, setActiveGroupPhotoIdx] = useState(0);
+  const [previewPhotoModal, setPreviewPhotoModal] = useState<GalleryPhoto | null>(null);
+  const [previewVideoModal, setPreviewVideoModal] = useState<{ title: string; url: string } | null>(null);
 
-  const activeSchoolName = activeSchoolItem?.name || school?.name || '';
-  const activePhotoWeb = activeSchoolItem?.group_photo_web || school?.group_photo_web || '';
-  const activePhotoHd = activeSchoolItem?.group_photo_hd || school?.group_photo_hd || '';
-  const activeVideo = activeSchoolItem?.multimedia_url || school?.multimedia_url || '';
+  // Group Photos: all photos with category 'Grupal'
+  const groupPhotos = photos.filter(p => p.category === 'Grupal');
+  const finalGroupPhotos = groupPhotos.length > 0 
+    ? groupPhotos 
+    : (school?.group_photo_web 
+        ? [{
+            id: 'primary-cover',
+            school_id: school.id,
+            url_web: school.group_photo_web,
+            url_hd: school.group_photo_hd || school.group_photo_web,
+            category: 'Grupal',
+            sort_order: 1
+          } as GalleryPhoto]
+        : []);
+
+  const activeGroupPhoto = finalGroupPhotos[activeGroupPhotoIdx] || finalGroupPhotos[0];
+  const groupVideos = getSchoolVideos(school);
+  const tripPhotos = photos.filter(p => p.category !== 'Grupal');
 
   const bannerUrl = school 
-    ? `https://fotos.dreamscda.com.ar/?source=supertourchannel.com.ar&utm_source=supertourchannel.com.ar&utm_medium=banner&colegio=${encodeURIComponent(activeSchoolName)}` 
+    ? `https://fotos.dreamscda.com.ar/?source=supertourchannel.com.ar&utm_source=supertourchannel.com.ar&utm_medium=banner&colegio=${encodeURIComponent(school.name)}` 
     : 'https://fotos.dreamscda.com.ar/?source=supertourchannel.com.ar&utm_source=supertourchannel.com.ar&utm_medium=banner';
 
   const handleBannerClick = () => {
@@ -42,23 +74,11 @@ export const SchoolDetailPage: React.FC = () => {
       destination: school.destination,
       metadata: {
         is_unique: !wasClicked,
-        colegio: activeSchoolName
+        colegio: school.name
       }
     });
     localStorage.setItem('supertour_clicked_banner_event', 'true');
   };
-
-  const filteredPhotos = photos.filter(p => {
-    if (!p.url_web) return true;
-    try {
-      const url = new URL(p.url_web);
-      const sub = url.searchParams.get('sub');
-      if (!sub) return true;
-      return sub === activeSchoolName;
-    } catch {
-      return true;
-    }
-  });
 
   // Survey states
   const [activeSurvey, setActiveSurvey] = useState<any | null>(null);
@@ -192,7 +212,7 @@ export const SchoolDetailPage: React.FC = () => {
         if (schoolError) throw schoolError;
 
         if (schoolData) {
-          setSchool(schoolData as School);
+          setSchool(normalizeSchoolWithCdn(schoolData as School));
           
           // Track school view in real-time
           trackEvent({
@@ -211,7 +231,7 @@ export const SchoolDetailPage: React.FC = () => {
           if (photoError) throw photoError;
 
           if (photoData && photoData.length > 0) {
-            setPhotos(photoData as GalleryPhoto[]);
+            setPhotos((photoData as GalleryPhoto[]).map(normalizeGalleryPhotoWithCdn));
           } else {
             setPhotos([]);
           }
@@ -525,24 +545,19 @@ export const SchoolDetailPage: React.FC = () => {
 
             {/* Quick Actions (Downloads) */}
             <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-              {activeVideo && 
-               activeVideo.trim() !== '' && 
-               activeVideo !== 'https://demo.backblaze.com/download/viaje.zip' && (
-                <a
-                  href={activeVideo}
-                  download={`SuperTour-${activeSchoolName}-Multimedia.zip`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              {groupVideos.length > 0 && (
+                <button
+                  onClick={() => document.getElementById('seccion-videos')?.scrollIntoView({ behavior: 'smooth' })}
                   className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 font-black text-xs uppercase tracking-wider text-white transition-all duration-300 w-full sm:w-auto"
                 >
                   <Film size={16} className="text-primary" />
-                  Descargar Video ({activeSchoolName})
-                </a>
+                  Ver Videos ({groupVideos.length})
+                </button>
               )}
               
-              {activePhotoHd && (
+              {activeGroupPhoto && (activeGroupPhoto.url_hd || activeGroupPhoto.url_web) && (
                 <button
-                  onClick={() => downloadFileDirectly(activePhotoHd, `SuperTour-${activeSchoolName}-FotoGrupal.jpg`)}
+                  onClick={() => downloadFileDirectly(activeGroupPhoto.url_hd || activeGroupPhoto.url_web || school.group_photo_hd, `SuperTour-${school.name}-FotoGrupal.jpg`)}
                   className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-all duration-300 w-full sm:w-auto glow-yellow"
                 >
                   <Download size={16} />
@@ -553,67 +568,188 @@ export const SchoolDetailPage: React.FC = () => {
           </div>
         </div>
 
-        {school.school_items && school.school_items.length > 1 && (
-          <div className="mb-10 p-5 rounded-2xl bg-zinc-950/90 border border-zinc-850 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
-            <span className="text-xs font-black text-zinc-300 uppercase tracking-wider flex items-center justify-center md:justify-start gap-1.5 leading-none text-center md:text-left w-full md:w-auto">
-              <Sparkles size={15} className="text-primary animate-pulse" />
-              Seleccioná tu colegio para ver su foto y video:
-            </span>
-            <div className="flex flex-col w-full md:flex-row md:w-auto md:flex-wrap md:items-center gap-2">
-              {school.school_items.map((sItem, sIdx) => {
-                const isSelected = selectedSchoolIdx === sIdx;
-                return (
-                  <button
-                    key={sItem.id || sIdx}
-                    onClick={() => setSelectedSchoolIdx(sIdx)}
-                    className={`w-full md:w-auto text-center px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 ${
-                      isSelected
-                        ? 'bg-primary text-black glow-yellow scale-[1.01]'
-                        : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
-                    }`}
-                  >
-                    {sItem.name}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Featured Group Photo Frame */}
+        {/* ============================================================== */}
+        {/* SECCIÓN 1: GALERÍA DE FOTOS GRUPALES (NIVEL DE GRUPO)          */}
+        {/* ============================================================== */}
         <section className="mb-16 select-none">
           <div className="text-center md:text-left mb-6">
             <span className="text-xs font-bold text-primary tracking-[0.25em] uppercase glow-text-yellow">
-              Foto Destacada
+              Recuerdos Oficiales
             </span>
             <h2 className="text-xl sm:text-2xl font-black text-white mt-1 uppercase tracking-tight flex items-center justify-center md:justify-start gap-2">
               <Users size={20} className="text-primary" />
-              La Foto Grupal Oficial {school.school_items && school.school_items.length > 1 ? `— ${activeSchoolName}` : ''}
+              {finalGroupPhotos.length > 1 ? `Galería de Fotos Grupales (${finalGroupPhotos.length})` : 'La Foto Grupal Oficial'}
             </h2>
+            {finalGroupPhotos.length > 1 && (
+              <p className="text-zinc-400 text-xs mt-1">
+                Hacé clic en las miniaturas para alternar entre las fotos grupales tomadas en el viaje.
+              </p>
+            )}
           </div>
 
-          <div className="glass-card rounded-3xl overflow-hidden p-3 border border-zinc-800/40 shadow-premium">
-            <div className="relative aspect-[16/9] w-full rounded-2xl overflow-hidden border border-zinc-900 group">
-              <img
-                src={activePhotoWeb || school.group_photo_web}
-                alt={`${activeSchoolName} - Foto Grupal`}
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.01]"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-between p-6">
-                <span className="text-xs font-bold text-zinc-300 uppercase tracking-widest">
-                  {activeSchoolName} • Viaje a {school.destination} • {formatDate(school.travel_date)}
-                </span>
-                <button
-                  onClick={() => downloadFileDirectly(activePhotoHd || school.group_photo_hd, `SuperTour-${activeSchoolName}-Grupal.jpg`)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-black text-xs font-black uppercase tracking-wider transition-transform scale-95 group-hover:scale-100 duration-300"
-                >
-                  <Download size={12} />
-                  Descargar HD
-                </button>
+          <div className="space-y-4">
+            {/* Foto Destacada Principal */}
+            <div className="glass-card rounded-3xl overflow-hidden p-3 border border-zinc-800/40 shadow-premium">
+              <div className="relative aspect-[16/9] w-full rounded-2xl overflow-hidden border border-zinc-900 group bg-black">
+                <img
+                  src={toCdnUrl(activeGroupPhoto.url_web || activeGroupPhoto.url_hd || school.group_photo_web)}
+                  alt={`${school.name} - Foto Grupal`}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.01]"
+                />
+                
+                {/* Badge Superior */}
+                <div className="absolute top-4 left-4 z-10">
+                  <span className="px-3 py-1.5 rounded-xl bg-black/80 backdrop-blur-md border border-zinc-800 text-[10px] font-black text-white uppercase tracking-wider shadow-lg flex items-center gap-1.5">
+                    <Sparkles size={11} className="text-primary" />
+                    Foto Grupal {finalGroupPhotos.length > 1 ? `#${activeGroupPhotoIdx + 1} de ${finalGroupPhotos.length}` : 'Oficial'}
+                  </span>
+                </div>
+
+                {/* Overlay Inferior */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-between p-6">
+                  <span className="text-xs font-bold text-zinc-300 uppercase tracking-widest hidden sm:block">
+                    {school.name} • Viaje a {school.destination} • {formatDate(school.travel_date)}
+                  </span>
+                  
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button
+                      onClick={() => setPreviewPhotoModal(activeGroupPhoto)}
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-white border border-zinc-700 text-xs font-black uppercase tracking-wider transition-all"
+                    >
+                      <ZoomIn size={14} />
+                      Ver Completa
+                    </button>
+                    <button
+                      onClick={() => downloadFileDirectly(activeGroupPhoto.url_hd || activeGroupPhoto.url_web || school.group_photo_hd, `SuperTour-${school.name}-Grupal-${activeGroupPhotoIdx + 1}.jpg`)}
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-black text-xs font-black uppercase tracking-wider transition-all glow-yellow"
+                    >
+                      <Download size={14} />
+                      Descargar HD
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
+
+            {/* Selector de Miniaturas si hay más de 1 foto grupal */}
+            {finalGroupPhotos.length > 1 && (
+              <div className="flex items-center gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin">
+                {finalGroupPhotos.map((gPhoto, gIdx) => {
+                  const isSelected = activeGroupPhotoIdx === gIdx;
+                  return (
+                    <button
+                      key={gPhoto.id || gIdx}
+                      onClick={() => setActiveGroupPhotoIdx(gIdx)}
+                      className={`relative flex-shrink-0 w-28 sm:w-36 aspect-[16/10] rounded-xl overflow-hidden border-2 transition-all duration-300 ${
+                        isSelected 
+                          ? 'border-primary ring-2 ring-primary/40 scale-[1.03] shadow-lg' 
+                          : 'border-zinc-800 opacity-60 hover:opacity-100 hover:border-zinc-600'
+                      }`}
+                    >
+                      <img
+                        src={toCdnUrl(gPhoto.url_web || gPhoto.url_hd)}
+                        alt={`Miniatura Grupal ${gIdx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-black/80 text-[8px] font-black text-white uppercase">
+                        #{gIdx + 1}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </section>
+
+        {/* ============================================================== */}
+        {/* SECCIÓN 2: GALERÍA DE VIDEOS (DEBAJO DE FOTOS GRUPALES)        */}
+        {/* ============================================================== */}
+        {groupVideos.length > 0 && (
+          <section id="seccion-videos" className="mb-16 select-none animate-fade-in">
+            <div className="text-center md:text-left mb-6">
+              <span className="text-xs font-bold text-primary tracking-[0.25em] uppercase glow-text-yellow">
+                Recuerdos Audiovisuales
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-white mt-1 uppercase tracking-tight flex items-center justify-center md:justify-start gap-2">
+                <Film size={20} className="text-primary animate-pulse" />
+                Videos del Viaje ({groupVideos.length})
+              </h2>
+              <p className="text-zinc-500 text-xs sm:text-sm mt-1">
+                Mirá y descargá las filmaciones y material multimedia exclusivo de tu grupo de egresados.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {groupVideos.map((vid, vIdx) => {
+                const isZip = vid.url.toLowerCase().endsWith('.zip');
+                const isVideoFile = vid.url.toLowerCase().match(/\.(mp4|webm|mov|m4v)(\?.*)?$/i);
+
+                return (
+                  <div
+                    key={vid.id || vIdx}
+                    className="glass-card rounded-3xl overflow-hidden border border-zinc-800/40 p-4 bg-zinc-950/80 shadow-premium flex flex-col justify-between space-y-4 hover:border-zinc-700 transition-all"
+                  >
+                    {isVideoFile ? (
+                      <div className="rounded-2xl overflow-hidden bg-black aspect-video relative group/v">
+                        <video
+                          controls
+                          preload="metadata"
+                          className="w-full h-full object-contain bg-black"
+                          src={toCdnUrl(vid.url)}
+                        >
+                          Tu navegador no soporta la reproducción de video HTML5.
+                        </video>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl bg-zinc-900/60 aspect-video flex flex-col items-center justify-center p-4 text-center border border-zinc-800">
+                        <Layers size={36} className="text-primary mb-2" />
+                        <span className="text-xs font-black uppercase text-zinc-300 tracking-wider">
+                          Archivo Multimedia (ZIP)
+                        </span>
+                        <span className="text-[10px] text-zinc-500 uppercase mt-1">
+                          Descargá el paquete completo
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="space-y-3 pt-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-sm font-black uppercase text-white tracking-tight line-clamp-1" title={vid.title}>
+                          {vid.title}
+                        </h3>
+                        <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-black uppercase text-primary flex-shrink-0">
+                          {isZip ? 'ZIP' : 'HD'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {isVideoFile && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewVideoModal({ title: vid.title, url: vid.url })}
+                            className="flex-1 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <Play size={12} className="text-primary fill-primary" />
+                            Pantalla Completa
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => downloadFileDirectly(vid.url, `${vid.title || 'Video'}${isZip ? '.zip' : '.mp4'}`)}
+                          className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors glow-yellow"
+                        >
+                          <Download size={13} />
+                          Descargar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Survey Segment */}
         {activeSurvey && (
@@ -717,8 +853,101 @@ export const SchoolDetailPage: React.FC = () => {
             </p>
           </div>
 
-          <PremiumGallery photos={filteredPhotos} schoolName={activeSchoolName} />
+          <PremiumGallery photos={tripPhotos.length > 0 ? tripPhotos : photos} schoolName={school.name} />
         </section>
+
+        {/* MODAL DE ZOOM / VISTA COMPLETA DE FOTO GRUPAL */}
+        {previewPhotoModal && (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in"
+            onClick={() => setPreviewPhotoModal(null)}
+          >
+            <div 
+              className="relative max-w-5xl w-full bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 flex items-center justify-between border-b border-zinc-900 flex-shrink-0">
+                <span className="text-xs font-black uppercase text-zinc-300 tracking-wider flex items-center gap-2">
+                  <ImageIcon size={14} className="text-primary" />
+                  Foto Grupal Oficial en Alta Definición
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => downloadFileDirectly(previewPhotoModal.url_hd || previewPhotoModal.url_web, `SuperTour-${school.name}-Grupal.jpg`)}
+                    className="px-3.5 py-1.5 rounded-xl bg-primary text-black font-black text-xs uppercase tracking-wider flex items-center gap-1.5 glow-yellow"
+                  >
+                    <Download size={13} />
+                    Descargar HD
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPhotoModal(null)}
+                    className="p-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-auto p-2 flex items-center justify-center bg-black/60">
+                <img
+                  src={toCdnUrl(previewPhotoModal.url_hd || previewPhotoModal.url_web)}
+                  alt="Vista completa grupal"
+                  className="max-h-[75vh] w-auto max-w-full object-contain rounded-xl"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL DE REPRODUCTOR DE VIDEO A PANTALLA COMPLETA */}
+        {previewVideoModal && (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in"
+            onClick={() => setPreviewVideoModal(null)}
+          >
+            <div 
+              className="relative max-w-4xl w-full bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-4 flex items-center justify-between border-b border-zinc-900">
+                <span className="text-xs font-black uppercase text-white tracking-wider flex items-center gap-2 truncate">
+                  <Film size={14} className="text-primary" />
+                  {previewVideoModal.title}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => downloadFileDirectly(previewVideoModal.url, `${previewVideoModal.title}.mp4`)}
+                    className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white font-bold text-xs uppercase tracking-wider flex items-center gap-1 border border-zinc-800"
+                  >
+                    <Download size={13} />
+                    Descargar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewVideoModal(null)}
+                    className="p-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3 bg-black flex items-center justify-center">
+                <video
+                  controls
+                  autoPlay
+                  src={toCdnUrl(previewVideoModal.url)}
+                  className="w-full max-h-[70vh] rounded-2xl bg-black"
+                >
+                  Tu navegador no soporta la reproducción de video HTML5.
+                </video>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
       <Footer />
     </div>

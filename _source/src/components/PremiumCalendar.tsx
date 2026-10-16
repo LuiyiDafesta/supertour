@@ -4,6 +4,7 @@ import { Calendar as CalendarIcon, MapPin, Sparkles, ChevronRight } from 'lucide
 import { supabase } from '../lib/supabase';
 import { School } from '../types/database';
 import { trackEvent } from '../lib/analytics';
+import { toCdnUrl, normalizeSchoolWithCdn } from '../lib/cdn';
 
 interface PremiumCalendarProps {
   destination: 'Mar del Plata' | 'Villa Carlos Paz';
@@ -101,7 +102,7 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
 
         let loadedSchools: School[] = [];
         if (data && data.length > 0) {
-          loadedSchools = data as School[];
+          loadedSchools = (data as School[]).map(normalizeSchoolWithCdn);
         } else {
           // Fallback to mock data matching selected destination
           loadedSchools = mockSchools.filter((s) => s.destination === destination);
@@ -368,7 +369,7 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
                         {/* School Preview thumbnail */}
                         <div className="w-12 h-12 rounded-lg overflow-hidden border border-zinc-800 bg-zinc-950 flex-shrink-0">
                           <img
-                            src={school.group_photo_web}
+                            src={toCdnUrl(school.group_photo_web)}
                             alt={school.name}
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                           />

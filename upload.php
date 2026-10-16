@@ -14,6 +14,7 @@ $applicationKey = "K004dFQArQ0gYGBE0al0wxP2zxk/G8k";
 $bucketId = "9299dad1580a680e9cee081c";
 $bucketName = "SupertourLow";
 $region = "us-west-004";
+$cdnDomain = "https://media.supertourchannel.com.ar";
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -112,8 +113,8 @@ curl_close($ch);
 
 $result = json_decode($response, true);
 if (isset($result['fileId'])) {
-    // Generar la URL pública del bucket basada en S3 Backblaze
-    $publicUrl = "https://$bucketName.s3.$region.backblazeb2.com/$fileName";
+    // Generar la URL pública a través del CDN Cloudflare (Egress $0 + Caché en Edge)
+    $publicUrl = "$cdnDomain/$bucketName/$fileName";
     
     echo json_encode([
         "success" => true,
