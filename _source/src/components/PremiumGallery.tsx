@@ -53,6 +53,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
   useEffect(() => {
     setCurrentPage(1);
     setSelectedPhotoIds(new Set());
+    setLightboxIndex(null);
   }, [photos]);
 
   const totalPhotos = photos.length;
@@ -551,7 +552,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
       )}
 
       {/* FULL-SCREEN PREMIUM LIGHTBOX */}
-      {lightboxIndex !== null && (
+      {lightboxIndex !== null && photos[lightboxIndex] && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md select-none transition-all duration-300"
           onClick={() => setLightboxIndex(null)}

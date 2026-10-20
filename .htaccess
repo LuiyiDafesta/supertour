@@ -1,8 +1,17 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
+
+  # OPS-01: Bloquear acceso directo al codigo fuente (_source)
+  RewriteRule ^_source(/|$) - [F,L,NC]
+
+  # Bloquear acceso a archivos y carpetas ocultos (.env, .git, etc.)
+  RewriteRule (^|/)\. - [F,L]
+
+  # No reescribir si el archivo o directorio existe fisicamente (APIs PHP, assets, etc.)
   RewriteRule ^index\.html$ - [L]
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /index.html [L]
 </IfModule>
+

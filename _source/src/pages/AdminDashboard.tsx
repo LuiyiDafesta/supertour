@@ -225,12 +225,23 @@ export const AdminDashboard: React.FC = () => {
     }
   ];
 
-  // Check auth session
+  // Check auth session & admin privileges
   useEffect(() => {
     const checkUser = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        console.log('No admin session. Offline mode active for easy local testing.');
+      const { data, error } = await supabase.auth.getSession();
+      if (error || !data.session?.user) {
+        navigate('/login', { replace: true });
+        return;
+      }
+
+      const { data: adminRecord, error: adminErr } = await supabase
+        .from('admin_users')
+        .select('id')
+        .eq('id', data.session.user.id)
+        .maybeSingle();
+
+      if (adminErr || !adminRecord) {
+        navigate('/login', { replace: true });
       }
     };
     checkUser();
@@ -440,44 +451,33 @@ export const AdminDashboard: React.FC = () => {
       let webUrl = '';
       let hdUrl = '';
 
-      try {
-        // Enviar versión Web comprimida a upload.php
-        const formDataWeb = new FormData();
-        formDataWeb.append('file', compressedFile);
-        formDataWeb.append('filename', remotePathWeb);
+      // Enviar versión Web comprimida a upload.php
+      const formDataWeb = new FormData();
+      formDataWeb.append('file', compressedFile);
+      formDataWeb.append('filename', remotePathWeb);
 
-        const resWeb = await fetch('/upload.php', { method: 'POST', body: formDataWeb });
-        if (!resWeb.ok) throw new Error('Error al subir versión Web');
-        const dataWeb = await resWeb.json();
-        if (!dataWeb.success) throw new Error(dataWeb.error || 'Fallo de subida');
-        webUrl = toCdnUrl(dataWeb.url);
+      const resWeb = await fetch('/upload.php', { method: 'POST', body: formDataWeb });
+      if (!resWeb.ok) throw new Error('Error al subir versión Web');
+      const dataWeb = await resWeb.json();
+      if (!dataWeb.success) throw new Error(dataWeb.error || 'Fallo de subida');
+      webUrl = toCdnUrl(dataWeb.url);
 
-        setGroupPhotoProgress(65);
-        setGroupPhotoStatus('Subiendo versión HD...');
+      setGroupPhotoProgress(65);
+      setGroupPhotoStatus('Subiendo versión HD...');
 
-        // Enviar versión HD original a upload.php
-        const formDataHd = new FormData();
-        formDataHd.append('file', file);
-        formDataHd.append('filename', remotePathHd);
+      // Enviar versión HD original a upload.php
+      const formDataHd = new FormData();
+      formDataHd.append('file', file);
+      formDataHd.append('filename', remotePathHd);
 
-        const resHd = await fetch('/upload.php', { method: 'POST', body: formDataHd });
-        if (!resHd.ok) throw new Error('Error al subir versión HD');
-        const dataHd = await resHd.json();
-        if (!dataHd.success) throw new Error(dataHd.error || 'Fallo de subida');
-        hdUrl = toCdnUrl(dataHd.url);
+      const resHd = await fetch('/upload.php', { method: 'POST', body: formDataHd });
+      if (!resHd.ok) throw new Error('Error al subir versión HD');
+      const dataHd = await resHd.json();
+      if (!dataHd.success) throw new Error(dataHd.error || 'Fallo de subida');
+      hdUrl = toCdnUrl(dataHd.url);
 
-        setGroupPhotoProgress(100);
-        setGroupPhotoStatus('Éxito ✅');
-      } catch (uploadError) {
-        console.warn('Subida real falló, enlazando simulación de desarrollo:', uploadError);
-        // Simulación offline en desarrollo
-        webUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&sig=${timestamp}`;
-        hdUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1600&sig=${timestamp}`;
-        
-        setGroupPhotoProgress(100);
-        setGroupPhotoStatus('Éxito (Simulado) ✅');
-      }
-
+      setGroupPhotoProgress(100);
+      setGroupPhotoStatus('Éxito ✅');
       setGroupWebUrl(webUrl);
       setGroupHdUrl(hdUrl);
       setSuccessMsg('Foto grupal cargada y procesada con éxito.');
@@ -509,29 +509,19 @@ export const AdminDashboard: React.FC = () => {
       setVideoProgress(35);
       setVideoStatus('Subiendo video/zip...');
 
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('filename', remotePath);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('filename', remotePath);
 
-        const res = await fetch('/upload.php', { method: 'POST', body: formData });
-        if (!res.ok) throw new Error('Error al subir el archivo multimedia');
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error || 'Fallo de subida de video');
+      const res = await fetch('/upload.php', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error('Error al subir el archivo multimedia');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Fallo de subida de video');
 
-        setVideoProgress(100);
-        setVideoStatus('Éxito ✅');
-        setMultimediaUrl(toCdnUrl(data.url));
-        setSuccessMsg('Archivo multimedia cargado con éxito en CDN / Backblaze B2.');
-      } catch (uploadError) {
-        console.warn('Subida real de video falló, usando simulación de desarrollo:', uploadError);
-        // Simulación offline en desarrollo
-        const mockUrl = `https://demo.backblaze.com/download/viaje-${timestamp}.zip`;
-        setVideoProgress(100);
-        setVideoStatus('Éxito (Simulado) ✅');
-        setMultimediaUrl(mockUrl);
-        setSuccessMsg('[Modo Desarrollo] Archivo multimedia asociado localmente.');
-      }
+      setVideoProgress(100);
+      setVideoStatus('Éxito ✅');
+      setMultimediaUrl(toCdnUrl(data.url));
+      setSuccessMsg('Archivo multimedia cargado con éxito en CDN / Backblaze B2.');
     } catch (err: any) {
       console.error('Error al procesar video/zip:', err);
       setErrorMsg(err.message || 'Error al procesar archivo');
@@ -600,29 +590,23 @@ export const AdminDashboard: React.FC = () => {
         let webUrl = '';
         let hdUrl = '';
 
-        try {
-          // Subir versión Web comprimida a upload.php
-          const formDataWeb = new FormData();
-          formDataWeb.append('file', compressed);
-          formDataWeb.append('filename', remotePathWeb);
-          const resWeb = await fetch('/upload.php', { method: 'POST', body: formDataWeb });
-          const dataWeb = await resWeb.json();
-          if (!dataWeb.success) throw new Error(dataWeb.error || 'Fallo de subida versión web');
-          webUrl = toCdnUrl(dataWeb.url);
+        // Subir versión Web comprimida a upload.php
+        const formDataWeb = new FormData();
+        formDataWeb.append('file', compressed);
+        formDataWeb.append('filename', remotePathWeb);
+        const resWeb = await fetch('/upload.php', { method: 'POST', body: formDataWeb });
+        const dataWeb = await resWeb.json();
+        if (!dataWeb.success) throw new Error(dataWeb.error || 'Fallo de subida versión web');
+        webUrl = toCdnUrl(dataWeb.url);
 
-          // Subir versión HD original a upload.php
-          const formDataHd = new FormData();
-          formDataHd.append('file', file);
-          formDataHd.append('filename', remotePathHd);
-          const resHd = await fetch('/upload.php', { method: 'POST', body: formDataHd });
-          const dataHd = await resHd.json();
-          if (!dataHd.success) throw new Error(dataHd.error || 'Fallo de subida versión HD');
-          hdUrl = toCdnUrl(dataHd.url);
-        } catch (uploadErr: any) {
-          console.warn('Subida real falló, utilizando respaldo offline:', uploadErr);
-          webUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&sig=${timestamp}-${i}`;
-          hdUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1600&sig=${timestamp}-${i}`;
-        }
+        // Subir versión HD original a upload.php
+        const formDataHd = new FormData();
+        formDataHd.append('file', file);
+        formDataHd.append('filename', remotePathHd);
+        const resHd = await fetch('/upload.php', { method: 'POST', body: formDataHd });
+        const dataHd = await resHd.json();
+        if (!dataHd.success) throw new Error(dataHd.error || 'Fallo de subida versión HD');
+        hdUrl = toCdnUrl(dataHd.url);
 
         // 2. Registrar en Supabase gallery_photos con categoría 'Grupal' y URLs CDN
         try {
@@ -761,11 +745,18 @@ export const AdminDashboard: React.FC = () => {
     setGalleryPhotos(prev => prev.filter(p => p.id !== photo.id));
     
     // Si era la portada, actualizar a otra foto grupal restante si existe
-    if (viewingGallerySchool && viewingGallerySchool.group_photo_web === photo.url_web) {
+    const isCover = viewingGallerySchool && (
+      viewingGallerySchool.group_photo_web === photo.url_web ||
+      toCdnUrl(viewingGallerySchool.group_photo_web) === toCdnUrl(photo.url_web) ||
+      viewingGallerySchool.group_photo_hd === photo.url_hd ||
+      toCdnUrl(viewingGallerySchool.group_photo_hd) === toCdnUrl(photo.url_hd)
+    );
+
+    if (isCover) {
       const remainingGroupPhotos = galleryPhotos.filter(p => p.category === 'Grupal' && p.id !== photo.id);
       const nextCover = remainingGroupPhotos[0];
-      const newWeb = nextCover ? nextCover.url_web : '';
-      const newHd = nextCover ? nextCover.url_hd : '';
+      const newWeb = nextCover ? toCdnUrl(nextCover.url_web) : '';
+      const newHd = nextCover ? toCdnUrl(nextCover.url_hd) : '';
       try {
         await supabase.from('schools').update({ group_photo_web: newWeb, group_photo_hd: newHd }).eq('id', viewingGallerySchool.id);
       } catch {}
@@ -1256,24 +1247,23 @@ export const AdminDashboard: React.FC = () => {
 
       let webUrl = '';
       let hdUrl = '';
-      try {
-        const formDataWeb = new FormData();
-        formDataWeb.append('file', compressedFile);
-        formDataWeb.append('filename', remotePathWeb);
-        const resWeb = await fetch('/upload.php', { method: 'POST', body: formDataWeb });
-        const dataWeb = await resWeb.json();
-        webUrl = toCdnUrl(dataWeb.url);
+      const formDataWeb = new FormData();
+      formDataWeb.append('file', compressedFile);
+      formDataWeb.append('filename', remotePathWeb);
+      const resWeb = await fetch('/upload.php', { method: 'POST', body: formDataWeb });
+      if (!resWeb.ok) throw new Error('Error al subir versión Web');
+      const dataWeb = await resWeb.json();
+      if (!dataWeb.success) throw new Error(dataWeb.error || 'Fallo al subir versión Web');
+      webUrl = toCdnUrl(dataWeb.url);
 
-        const formDataHd = new FormData();
-        formDataHd.append('file', file);
-        formDataHd.append('filename', remotePathHd);
-        const resHd = await fetch('/upload.php', { method: 'POST', body: formDataHd });
-        const dataHd = await resHd.json();
-        hdUrl = toCdnUrl(dataHd.url);
-      } catch {
-        webUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&sig=${timestamp}`;
-        hdUrl = `https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1600&sig=${timestamp}`;
-      }
+      const formDataHd = new FormData();
+      formDataHd.append('file', file);
+      formDataHd.append('filename', remotePathHd);
+      const resHd = await fetch('/upload.php', { method: 'POST', body: formDataHd });
+      if (!resHd.ok) throw new Error('Error al subir versión HD');
+      const dataHd = await resHd.json();
+      if (!dataHd.success) throw new Error(dataHd.error || 'Fallo al subir versión HD');
+      hdUrl = toCdnUrl(dataHd.url);
 
       setSchoolItems(prev => prev.map((item, i) => i === index ? { ...item, group_photo_web: webUrl, group_photo_hd: hdUrl } : item));
       setSuccessMsg(`Foto grupal de "${schoolItems[index]?.name || 'colegio'}" procesada y cargada.`);
@@ -1290,17 +1280,14 @@ export const AdminDashboard: React.FC = () => {
       const timestamp = Date.now();
       const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
       const remotePath = `multimedia/${timestamp}-${cleanName}`;
-      let videoUrl = '';
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('filename', remotePath);
-        const res = await fetch('/upload.php', { method: 'POST', body: formData });
-        const data = await res.json();
-        videoUrl = toCdnUrl(data.url);
-      } catch {
-        videoUrl = `https://demo.backblaze.com/download/viaje-${timestamp}.zip`;
-      }
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('filename', remotePath);
+      const res = await fetch('/upload.php', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error('Error al subir video del colegio');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Fallo de subida de video');
+      const videoUrl = toCdnUrl(data.url);
 
       setSchoolItems(prev => prev.map((item, i) => i === index ? { ...item, multimedia_url: videoUrl } : item));
       setSuccessMsg(`Video/Zip del colegio "${schoolItems[index]?.name || ''}" subido.`);
@@ -1442,6 +1429,27 @@ export const AdminDashboard: React.FC = () => {
     const photoToDelete = galleryPhotos.find(p => p.id === photoId);
     if (photoToDelete) {
       deleteFromB2([photoToDelete.url_web, photoToDelete.url_hd]);
+
+      // Si la foto eliminada era la portada del colegio, actualizar portada
+      if (viewingGallerySchool) {
+        const isCover = (
+          viewingGallerySchool.group_photo_web === photoToDelete.url_web ||
+          toCdnUrl(viewingGallerySchool.group_photo_web) === toCdnUrl(photoToDelete.url_web) ||
+          viewingGallerySchool.group_photo_hd === photoToDelete.url_hd ||
+          toCdnUrl(viewingGallerySchool.group_photo_hd) === toCdnUrl(photoToDelete.url_hd)
+        );
+        if (isCover) {
+          const remainingPhotos = galleryPhotos.filter(p => p.id !== photoId);
+          const nextCover = remainingPhotos.find(p => p.category === 'Grupal') || remainingPhotos[0];
+          const newWeb = nextCover ? toCdnUrl(nextCover.url_web) : '';
+          const newHd = nextCover ? toCdnUrl(nextCover.url_hd) : '';
+          try {
+            await supabase.from('schools').update({ group_photo_web: newWeb, group_photo_hd: newHd }).eq('id', viewingGallerySchool.id);
+          } catch {}
+          setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: newWeb, group_photo_hd: newHd } : null);
+          setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: newWeb, group_photo_hd: newHd } : s));
+        }
+      }
     }
 
     try {

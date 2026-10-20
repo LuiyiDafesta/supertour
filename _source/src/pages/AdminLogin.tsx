@@ -18,12 +18,20 @@ export const AdminLogin: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Check if session already exists
+  // Check if session already exists and has admin privileges
   useEffect(() => {
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        navigate('/admin');
+      if (data.session?.user) {
+        const { data: adminRecord } = await supabase
+          .from('admin_users')
+          .select('id')
+          .eq('id', data.session.user.id)
+          .maybeSingle();
+
+        if (adminRecord) {
+          navigate('/admin');
+        }
       }
     };
     checkSession();
@@ -35,12 +43,26 @@ export const AdminLogin: React.FC = () => {
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) throw error;
+
+      // Verificar que el usuario autenticado posee permisos explícitos de administrador
+      if (data.user) {
+        const { data: adminRecord, error: adminErr } = await supabase
+          .from('admin_users')
+          .select('id')
+          .eq('id', data.user.id)
+          .maybeSingle();
+
+        if (adminErr || !adminRecord) {
+          await supabase.auth.signOut();
+          throw new Error('Acceso denegado: esta cuenta no posee privilegios de administración.');
+        }
+      }
 
       navigate('/admin');
     } catch (err: any) {

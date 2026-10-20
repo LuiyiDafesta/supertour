@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Logo } from './Logo';
 import { Menu, X } from 'lucide-react';
 
@@ -8,6 +8,7 @@ export const Navbar: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
   const [activeSection, setActiveSection] = useState<'inicio' | 'destinos' | 'nosotros' | null>('inicio');
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Scroll active section spy (only on Landing Page)
   useEffect(() => {

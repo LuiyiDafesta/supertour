@@ -142,32 +142,19 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, onUploa
         let webUrl = '';
         let hdUrl = '';
 
-        try {
-          // Subir la versión Web optimizada
-          webUrl = await uploadToB2(compressedFile, remotePathWeb);
-          
-          setQueue((prev) =>
-            prev.map((x) => (x.id === item.id ? { ...x, progress: 70 } : x))
-          );
+        // Subir la versión Web optimizada
+        webUrl = await uploadToB2(compressedFile, remotePathWeb);
+        
+        setQueue((prev) =>
+          prev.map((x) => (x.id === item.id ? { ...x, progress: 70 } : x))
+        );
 
-          // Subir la versión HD original
-          hdUrl = await uploadToB2(item.file, remotePathHd);
-          
-          setQueue((prev) =>
-            prev.map((x) => (x.id === item.id ? { ...x, progress: 90 } : x))
-          );
-        } catch (uploadError: any) {
-          console.warn('Fallo en la subida real a Backblaze B2, utilizando simulación de desarrollo:', uploadError);
-          const unsplashTags = {
-            'Excursiones': `https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=800&sig=${timestamp}`,
-            'Fiestas': `https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&sig=${timestamp}`,
-            'Actividades': `https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&sig=${timestamp}`,
-            'Grupal': `https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&sig=${timestamp}`
-          };
-          webUrl = unsplashTags[item.category];
-          hdUrl = unsplashTags[item.category].replace('w=800', 'w=1600');
-          await new Promise((r) => setTimeout(r, 500));
-        }
+        // Subir la versión HD original
+        hdUrl = await uploadToB2(item.file, remotePathHd);
+        
+        setQueue((prev) =>
+          prev.map((x) => (x.id === item.id ? { ...x, progress: 90 } : x))
+        );
 
         // 3. Registrar Foto en la tabla 'gallery_photos'
         const rawWeb = subSchool 

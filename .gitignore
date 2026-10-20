@@ -10,3 +10,4 @@ _source/.env
 .DS_Store
 Thumbs.db
 *.local
+*.tsbuildinfo

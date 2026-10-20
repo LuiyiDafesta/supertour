@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { Footer } from '../components/Footer';
 import { useSEO } from '../hooks/useSEO';
+import { toast } from 'sonner';
 
 export const SchoolDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -54,7 +55,7 @@ export const SchoolDetailPage: React.FC = () => {
   const groupPhotos = photos.filter(p => p.category === 'Grupal');
   const finalGroupPhotos = groupPhotos.length > 0 
     ? groupPhotos 
-    : (school?.group_photo_web 
+    : (school?.group_photo_web && school.group_photo_web.trim() !== ''
         ? [{
             id: 'primary-cover',
             school_id: school.id,
@@ -65,7 +66,10 @@ export const SchoolDetailPage: React.FC = () => {
           } as GalleryPhoto]
         : []);
 
-  const activeGroupPhoto = finalGroupPhotos[activeGroupPhotoIdx] || finalGroupPhotos[0];
+  const safeGroupPhotoIdx = (activeGroupPhotoIdx >= 0 && activeGroupPhotoIdx < finalGroupPhotos.length)
+    ? activeGroupPhotoIdx
+    : 0;
+  const activeGroupPhoto = finalGroupPhotos.length > 0 ? finalGroupPhotos[safeGroupPhotoIdx] : null;
   const groupVideos = getSchoolVideos(school);
   const tripPhotos = photos.filter(p => p.category !== 'Grupal');
 
@@ -386,88 +390,52 @@ export const SchoolDetailPage: React.FC = () => {
     loadSurvey();
   }, [id]);
 
+  const [isVoting, setIsVoting] = useState(false);
+
   const handleVote = async (optionText: string) => {
-    if (hasVoted || !activeSurvey || !school) return;
+    if (hasVoted || isVoting || !activeSurvey || !school) return;
 
-    // 1. Guardar localmente para evitar doble voto
-    localStorage.setItem(`supertour_voted_survey_${activeSurvey.id}`, optionText);
-    setHasVoted(true);
-    setVotedOption(optionText);
+    setIsVoting(true);
 
-    // 2. Incrementar votos en el estado en caliente
-    const updatedOptions = activeSurvey.options.map((opt: any) => 
-      opt.text === optionText ? { ...opt, votes: opt.votes + 1 } : opt
-    );
-    const updatedSurvey = { ...activeSurvey, options: updatedOptions };
-    setActiveSurvey(updatedSurvey);
-    setSurveyVotesTotal(prev => prev + 1);
-
-    // 3. Registrar el evento analítico de voto en tiempo real
-    trackEvent({
-      event_type: 'survey_vote',
-      school_id: school.id,
-      destination: school.destination,
-      metadata: {
-        survey_id: activeSurvey.id,
-        option: optionText
-      }
-    });
-
-    // 4. Intentar persistir en Supabase o en localStorage
     try {
-      const { error } = await supabase
-        .from('surveys')
-        .update({ options: updatedOptions })
-        .eq('id', activeSurvey.id);
+      // 1. Persistir voto en Supabase mediante RPC atómica segura
+      const { data: updatedOptionsFromRpc, error: rpcError } = await (supabase as any)
+        .rpc('vote_survey_option', {
+          p_survey_id: activeSurvey.id,
+          p_option_text: optionText
+        });
 
-      if (error) throw error;
-    } catch (dbErr) {
-      console.warn('No se pudo persistir el voto en Supabase, guardando en cache local:', dbErr);
-      
-      // Actualizar en localStorage el listado local de encuestas
-      try {
-        const localSurveysRaw = localStorage.getItem('supertour_local_surveys');
-        let localSurveys = localSurveysRaw ? JSON.parse(localSurveysRaw) : [];
-        
-        // Si no existen encuestas locales aún, agregamos las mock
-        if (localSurveys.length === 0) {
-          localSurveys = [
-            {
-              id: 'survey-1',
-              question: '¿Cuál fue la excursión más emocionante del viaje?',
-              options: [
-                { text: 'Parque de Aventura Pekos', votes: 145 },
-                { text: 'Aerosilla Carlos Paz', votes: 89 },
-                { text: 'Rafting en el Río Suquía', votes: 202 },
-                { text: 'Senderismo en las Sierras', votes: 41 }
-              ],
-              active: true,
-              created_at: '2026-05-20'
-            },
-            {
-              id: 'survey-2',
-              question: '¿Qué boliche / matiné premium tuvo la mejor fiesta?',
-              options: [
-                { text: 'Khalama Disco', votes: 312 },
-                { text: 'Keops El Templo', votes: 278 },
-                { text: 'Molino Rojo', votes: 198 }
-              ],
-              active: false,
-              created_at: '2026-05-22'
-            }
-          ];
-        }
+      if (rpcError) throw rpcError;
 
-        const surveyIndex = localSurveys.findIndex((s: any) => s.id === activeSurvey.id);
-        if (surveyIndex !== -1) {
-          localSurveys[surveyIndex].options = updatedOptions;
-        } else {
-          localSurveys.push(updatedSurvey);
-        }
-        localStorage.setItem('supertour_local_surveys', JSON.stringify(localSurveys));
-      } catch (err) {
-        console.error('Error al actualizar encuestas locales:', err);
+      // 2. Solo tras confirmación del servidor se marca el voto como registrado
+      localStorage.setItem(`supertour_voted_survey_${activeSurvey.id}`, optionText);
+      setHasVoted(true);
+      setVotedOption(optionText);
+
+      if (updatedOptionsFromRpc && Array.isArray(updatedOptionsFromRpc)) {
+        setActiveSurvey(prev => prev ? { ...prev, options: updatedOptionsFromRpc } : prev);
+        const total = updatedOptionsFromRpc.reduce((sum: number, o: any) => sum + (o.votes || 0), 0);
+        setSurveyVotesTotal(total);
       }
+
+      // 3. Registrar el evento analítico de voto en tiempo real
+      trackEvent({
+        event_type: 'survey_vote',
+        school_id: school.id,
+        destination: school.destination,
+        metadata: {
+          survey_id: activeSurvey.id,
+          option: optionText
+        }
+      });
+
+      toast.success('¡Tu voto fue registrado exitosamente!');
+    } catch (err: any) {
+      console.error('Error al registrar voto en el servidor:', err);
+      toast.error('No se pudo registrar tu voto en el servidor. Por favor intentá nuevamente.');
+      // NO se marca setHasVoted(true) ni se confirma falsamente el voto
+    } finally {
+      setIsVoting(false);
     }
   };
 
@@ -712,79 +680,93 @@ export const SchoolDetailPage: React.FC = () => {
             )}
           </div>
 
-          <div className="space-y-4">
-            {/* Foto Destacada Principal */}
-            <div className="glass-card rounded-3xl overflow-hidden p-3 border border-zinc-800/40 shadow-premium">
-              <div className="relative aspect-[16/9] w-full rounded-2xl overflow-hidden border border-zinc-900 group bg-black">
-                <img
-                  src={toCdnUrl(activeGroupPhoto.url_web || activeGroupPhoto.url_hd || school.group_photo_web)}
-                  alt={`${school.name} - Foto Grupal`}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.01]"
-                />
-                
-                {/* Badge Superior */}
-                <div className="absolute top-4 left-4 z-10">
-                  <span className="px-3 py-1.5 rounded-xl bg-black/80 backdrop-blur-md border border-zinc-800 text-[10px] font-black text-white uppercase tracking-wider shadow-lg flex items-center gap-1.5">
-                    <Sparkles size={11} className="text-primary" />
-                    Foto Grupal {finalGroupPhotos.length > 1 ? `#${activeGroupPhotoIdx + 1} de ${finalGroupPhotos.length}` : 'Oficial'}
-                  </span>
-                </div>
-
-                {/* Overlay Inferior */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-between p-6">
-                  <span className="text-xs font-bold text-zinc-300 uppercase tracking-widest hidden sm:block">
-                    {school.name} • Viaje a {school.destination} • {formatDate(school.travel_date)}
-                  </span>
+          {activeGroupPhoto ? (
+            <div className="space-y-4">
+              {/* Foto Destacada Principal */}
+              <div className="glass-card rounded-3xl overflow-hidden p-3 border border-zinc-800/40 shadow-premium">
+                <div className="relative aspect-[16/9] w-full rounded-2xl overflow-hidden border border-zinc-900 group bg-black">
+                  <img
+                    src={toCdnUrl(activeGroupPhoto.url_web || activeGroupPhoto.url_hd || school.group_photo_web)}
+                    alt={`${school.name} - Foto Grupal`}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.01]"
+                  />
                   
-                  <div className="flex items-center gap-2 ml-auto">
-                    <button
-                      onClick={() => setPreviewPhotoModal(activeGroupPhoto)}
-                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-white border border-zinc-700 text-xs font-black uppercase tracking-wider transition-all"
-                    >
-                      <ZoomIn size={14} />
-                      Ver Completa
-                    </button>
-                    <button
-                      onClick={() => downloadFileDirectly(activeGroupPhoto.url_hd || activeGroupPhoto.url_web || school.group_photo_hd, `SuperTour-${school.name}-Grupal-${activeGroupPhotoIdx + 1}.jpg`)}
-                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-black text-xs font-black uppercase tracking-wider transition-all glow-yellow"
-                    >
-                      <Download size={14} />
-                      Descargar HD
-                    </button>
+                  {/* Badge Superior */}
+                  <div className="absolute top-4 left-4 z-10">
+                    <span className="px-3 py-1.5 rounded-xl bg-black/80 backdrop-blur-md border border-zinc-800 text-[10px] font-black text-white uppercase tracking-wider shadow-lg flex items-center gap-1.5">
+                      <Sparkles size={11} className="text-primary" />
+                      Foto Grupal {finalGroupPhotos.length > 1 ? `#${safeGroupPhotoIdx + 1} de ${finalGroupPhotos.length}` : 'Oficial'}
+                    </span>
+                  </div>
+
+                  {/* Overlay Inferior */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-between p-6">
+                    <span className="text-xs font-bold text-zinc-300 uppercase tracking-widest hidden sm:block">
+                      {school.name} • Viaje a {school.destination} • {formatDate(school.travel_date)}
+                    </span>
+                    
+                    <div className="flex items-center gap-2 ml-auto">
+                      <button
+                        onClick={() => setPreviewPhotoModal(activeGroupPhoto)}
+                        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-white border border-zinc-700 text-xs font-black uppercase tracking-wider transition-all"
+                      >
+                        <ZoomIn size={14} />
+                        Ver Completa
+                      </button>
+                      <button
+                        onClick={() => downloadFileDirectly(activeGroupPhoto.url_hd || activeGroupPhoto.url_web || school.group_photo_hd, `SuperTour-${school.name}-Grupal-${safeGroupPhotoIdx + 1}.jpg`)}
+                        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-black text-xs font-black uppercase tracking-wider transition-all glow-yellow"
+                      >
+                        <Download size={14} />
+                        Descargar HD
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Selector de Miniaturas si hay más de 1 foto grupal */}
-            {finalGroupPhotos.length > 1 && (
-              <div className="flex items-center gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin">
-                {finalGroupPhotos.map((gPhoto, gIdx) => {
-                  const isSelected = activeGroupPhotoIdx === gIdx;
-                  return (
-                    <button
-                      key={gPhoto.id || gIdx}
-                      onClick={() => setActiveGroupPhotoIdx(gIdx)}
-                      className={`relative flex-shrink-0 w-28 sm:w-36 aspect-[16/10] rounded-xl overflow-hidden border-2 transition-all duration-300 ${
-                        isSelected 
-                          ? 'border-primary ring-2 ring-primary/40 scale-[1.03] shadow-lg' 
-                          : 'border-zinc-800 opacity-60 hover:opacity-100 hover:border-zinc-600'
-                      }`}
-                    >
-                      <img
-                        src={toCdnUrl(gPhoto.url_web || gPhoto.url_hd)}
-                        alt={`Miniatura Grupal ${gIdx + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                      <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-black/80 text-[8px] font-black text-white uppercase">
-                        #{gIdx + 1}
-                      </span>
-                    </button>
-                  );
-                })}
+              {/* Selector de Miniaturas si hay más de 1 foto grupal */}
+              {finalGroupPhotos.length > 1 && (
+                <div className="flex items-center gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin">
+                  {finalGroupPhotos.map((gPhoto, gIdx) => {
+                    const isSelected = safeGroupPhotoIdx === gIdx;
+                    return (
+                      <button
+                        key={gPhoto.id || gIdx}
+                        onClick={() => setActiveGroupPhotoIdx(gIdx)}
+                        className={`relative flex-shrink-0 w-28 sm:w-36 aspect-[16/10] rounded-xl overflow-hidden border-2 transition-all duration-300 ${
+                          isSelected 
+                            ? 'border-primary ring-2 ring-primary/40 scale-[1.03] shadow-lg' 
+                            : 'border-zinc-800 opacity-60 hover:opacity-100 hover:border-zinc-600'
+                        }`}
+                      >
+                        <img
+                          src={toCdnUrl(gPhoto.url_web || gPhoto.url_hd)}
+                          alt={`Miniatura Grupal ${gIdx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-black/80 text-[8px] font-black text-white uppercase">
+                          #{gIdx + 1}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="glass-card rounded-3xl p-8 sm:p-12 border border-zinc-800/40 text-center shadow-premium bg-zinc-950/60">
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4 glow-yellow">
+                <Users size={28} className="text-primary" />
               </div>
-            )}
-          </div>
+              <h3 className="text-base sm:text-lg font-black uppercase text-white tracking-tight">
+                Fotos Grupales en Preparación
+              </h3>
+              <p className="text-zinc-400 text-xs mt-2 max-w-md mx-auto leading-relaxed">
+                Los coordinadores de SuperTour están preparando las fotos oficiales de este grupo. Estarán disponibles aquí a la brevedad.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* ============================================================== */}
