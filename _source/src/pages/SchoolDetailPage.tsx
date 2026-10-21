@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { School, GalleryPhoto } from '../types/database';
@@ -512,7 +513,7 @@ export const SchoolDetailPage: React.FC = () => {
       {/* Decorative Blur lights */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[600px] bg-gradient-to-b from-primary/5 via-transparent to-transparent blur-[120px] pointer-events-none z-0" />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24 relative z-10">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24 relative">
         {/* Back and Share Bar */}
         <div className="flex items-center justify-between mb-8 select-none">
           <button
@@ -894,9 +895,9 @@ export const SchoolDetailPage: React.FC = () => {
         </section>
 
         {/* MODAL DE ZOOM / VISTA COMPLETA DE FOTO GRUPAL */}
-        {previewPhotoModal && (
+        {previewPhotoModal && createPortal(
           <div 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in"
+            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-fade-in select-none"
             onClick={() => setPreviewPhotoModal(null)}
           >
             <div 
@@ -935,13 +936,14 @@ export const SchoolDetailPage: React.FC = () => {
                 />
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* MODAL DE REPRODUCTOR DE VIDEO A PANTALLA COMPLETA */}
-        {previewVideoModal && (
+        {previewVideoModal && createPortal(
           <div 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in"
+            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-fade-in select-none"
             onClick={() => setPreviewVideoModal(null)}
           >
             <div 
@@ -983,7 +985,8 @@ export const SchoolDetailPage: React.FC = () => {
                 </video>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </main>
       <Footer />

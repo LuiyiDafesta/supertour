@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { GalleryPhoto } from '../types/database';
 import { downloadFileDirectly } from '../lib/downloader';
 import { trackEvent } from '../lib/analytics';
@@ -551,23 +552,25 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
         </div>
       )}
 
-      {/* FULL-SCREEN PREMIUM LIGHTBOX */}
-      {lightboxIndex !== null && photos[lightboxIndex] && (
+      {/* FULL-SCREEN PREMIUM LIGHTBOX VIA PORTAL (ABOVE FIXED NAVBAR) */}
+      {lightboxIndex !== null && photos[lightboxIndex] && createPortal(
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md select-none transition-all duration-300"
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/95 backdrop-blur-md select-none transition-all duration-300"
           onClick={() => setLightboxIndex(null)}
         >
-          {/* Close trigger */}
+          {/* Close trigger - elevated above any layout element */}
           <button
             onClick={() => setLightboxIndex(null)}
-            className="absolute top-6 right-6 z-[110] p-3 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-all shadow-lg"
+            className="absolute top-5 right-5 sm:top-6 sm:right-6 z-[100000] p-3 rounded-full bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700/80 transition-all shadow-2xl active:scale-95 glow-yellow"
+            title="Cerrar vista completa"
+            aria-label="Cerrar"
           >
-            <X size={20} />
+            <X size={22} />
           </button>
 
           {/* Action header bar */}
           <div 
-            className="absolute top-6 left-6 z-[110] hidden sm:flex items-center gap-3 bg-zinc-900/80 border border-zinc-800/80 px-4 py-2 rounded-full"
+            className="absolute top-5 left-5 sm:top-6 sm:left-6 z-[100000] hidden sm:flex items-center gap-3 bg-zinc-900/80 border border-zinc-800/80 px-4 py-2 rounded-full"
             onClick={(e) => e.stopPropagation()}
           >
             <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
@@ -580,7 +583,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
 
           {/* Controls Overlay bar */}
           <div
-            className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[110] flex items-center gap-3 bg-zinc-900/90 border border-zinc-800/80 p-2.5 rounded-full shadow-2xl"
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[100000] flex items-center gap-3 bg-zinc-900/90 border border-zinc-800/80 p-2.5 rounded-full shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Zoom toggles */}
@@ -632,14 +635,14 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
           {/* Navigation Arrows */}
           <button
             onClick={handlePrev}
-            className="absolute left-4 sm:left-8 z-[110] p-3 rounded-full bg-zinc-900/60 hover:bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 transition-all"
+            className="absolute left-4 sm:left-8 z-[100000] p-3 rounded-full bg-zinc-900/60 hover:bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 transition-all"
           >
             <ChevronLeft size={24} />
           </button>
           
           <button
             onClick={handleNext}
-            className="absolute right-4 sm:left-auto sm:right-8 z-[110] p-3 rounded-full bg-zinc-900/60 hover:bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 transition-all"
+            className="absolute right-4 sm:left-auto sm:right-8 z-[100000] p-3 rounded-full bg-zinc-900/60 hover:bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 transition-all"
           >
             <ChevronRight size={24} />
           </button>
@@ -658,7 +661,8 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
               onClick={() => setIsZoomed(!isZoomed)}
             />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
