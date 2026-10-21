@@ -338,28 +338,32 @@ export const AdminDashboard: React.FC = () => {
         .from('gallery_photos')
         .select('*')
         .eq('school_id', schoolId)
-        .order('created_at', { ascending: false });
+        .order('sort_order', { ascending: true });
 
       if (error) throw error;
-      setGalleryPhotos(((data as GalleryPhoto[]) || []).map(normalizeGalleryPhotoWithCdn));
+      
+      const normalized = ((data as GalleryPhoto[]) || []).map(normalizeGalleryPhotoWithCdn);
+      const seen = new Set<string>();
+      const unique = normalized.filter(p => {
+        const key = p.url_web || p.url_hd || p.id;
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setGalleryPhotos(unique);
     } catch (err) {
-      console.warn('DB Error loading photos, using empty array locally.');
-      // En modo simulado offline de desarrollo, generamos placeholders para este colegio
-      setGalleryPhotos([
-        { id: 'gp-1', school_id: schoolId, url_web: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=400', url_hd: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=1600', category: 'Grupal', sort_order: 1 },
-        { id: 'gp-2', school_id: schoolId, url_web: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=400', url_hd: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=1600', category: 'Grupal', sort_order: 2 },
-        { id: 'gp-3', school_id: schoolId, url_web: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=400', url_hd: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=1600', category: 'Grupal', sort_order: 3 }
-      ]);
+      console.warn('DB Error loading photos, setting empty array:', err);
+      setGalleryPhotos([]);
     } finally {
       setLoadingPhotos(false);
     }
   };
 
   useEffect(() => {
-    if (viewingGallerySchool) {
+    if (viewingGallerySchool?.id) {
       loadSchoolPhotos(viewingGallerySchool.id);
     }
-  }, [viewingGallerySchool]);
+  }, [viewingGallerySchool?.id]);
 
   // Manejador para cargar y comprimir la Foto Grupal Oficial en el cliente y subirla
   const handleGroupPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -604,7 +608,7 @@ export const AdminDashboard: React.FC = () => {
     }
 
     if (uploadedPhotos.length > 0) {
-      setGalleryPhotos(prev => [...uploadedPhotos, ...prev]);
+      await loadSchoolPhotos(viewingGallerySchool.id);
     }
 
     if (failedList.length > 0) {
@@ -1864,7 +1868,14 @@ export const AdminDashboard: React.FC = () => {
                 return p.category === 'Grupal';
               };
 
-              const allGroupPhotos = galleryPhotos.filter(isGroupPhoto);
+              const seenGroupUrls = new Set<string>();
+              const allGroupPhotos = galleryPhotos.filter(p => {
+                if (!isGroupPhoto(p)) return false;
+                const key = toCdnUrl(p.url_web) || toCdnUrl(p.url_hd) || p.id;
+                if (!key || seenGroupUrls.has(key)) return false;
+                seenGroupUrls.add(key);
+                return true;
+              });
               const groupPhotos = allGroupPhotos.length > 0 
                 ? allGroupPhotos 
                 : (viewingGallerySchool.group_photo_web && !viewingGallerySchool.group_photo_web.includes('unsplash.com') 
@@ -2013,13 +2024,13 @@ export const AdminDashboard: React.FC = () => {
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 max-h-[500px] overflow-y-auto pr-1.5 scrollbar-thin">
                         {groupPhotos.map((photo, idx) => {
-                          const isCover = photo.url_web === viewingGallerySchool.group_photo_web || 
-                            photo.url_hd === viewingGallerySchool.group_photo_hd ||
+                          const isCover = toCdnUrl(photo.url_web) === toCdnUrl(viewingGallerySchool.group_photo_web) || 
+                            toCdnUrl(photo.url_hd) === toCdnUrl(viewingGallerySchool.group_photo_hd) ||
                             (idx === 0 && !viewingGallerySchool.group_photo_web);
 
                           return (
                             <div
-                              key={photo.id || idx}
+                              key={photo.id || `gp-${idx}-${photo.url_web}`}
                               className={`group relative rounded-2xl overflow-hidden border transition-all duration-300 bg-zinc-900/30 ${
                                 isCover ? 'border-primary shadow-[0_0_20px_rgba(250,204,21,0.15)] ring-1 ring-primary/40' : 'border-zinc-800 hover:border-zinc-700'
                               }`}

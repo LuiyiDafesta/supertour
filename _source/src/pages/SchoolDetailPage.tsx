@@ -61,7 +61,15 @@ export const SchoolDetailPage: React.FC = () => {
     return p.category === 'Grupal';
   };
 
-  const groupPhotos = photos.filter(isGroupPhoto);
+  const seenGroupUrls = new Set<string>();
+  const groupPhotos = photos.filter(p => {
+    if (!isGroupPhoto(p)) return false;
+    const key = toCdnUrl(p.url_web) || toCdnUrl(p.url_hd) || p.id;
+    if (!key || seenGroupUrls.has(key)) return false;
+    seenGroupUrls.add(key);
+    return true;
+  });
+
   const finalGroupPhotos = groupPhotos.length > 0 
     ? groupPhotos 
     : (school?.group_photo_web && school.group_photo_web.trim() !== '' && !school.group_photo_web.includes('unsplash.com')
@@ -80,7 +88,15 @@ export const SchoolDetailPage: React.FC = () => {
     : 0;
   const activeGroupPhoto = finalGroupPhotos.length > 0 ? finalGroupPhotos[safeGroupPhotoIdx] : null;
   const groupVideos = getSchoolVideos(school);
-  const tripPhotos = photos.filter(p => !isGroupPhoto(p));
+
+  const seenTripUrls = new Set<string>();
+  const tripPhotos = photos.filter(p => {
+    if (isGroupPhoto(p)) return false;
+    const key = toCdnUrl(p.url_web) || toCdnUrl(p.url_hd) || p.id;
+    if (!key || seenTripUrls.has(key)) return false;
+    seenTripUrls.add(key);
+    return true;
+  });
 
   const bannerUrl = school 
     ? `https://fotos.dreamscda.com.ar/?source=supertourchannel.com.ar&utm_source=supertourchannel.com.ar&utm_medium=banner&colegio=${encodeURIComponent(school.name)}` 
