@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { School, GalleryPhoto, SchoolItem, GroupVideo, Survey, normalizeSurvey } from '../types/database';
@@ -40,6 +41,9 @@ import {
   Copy,
   RotateCcw,
   AlertCircle,
+  AlertTriangle,
+  ShieldAlert,
+  Loader2,
   Upload,
   ArrowLeft,
   LogOut
@@ -111,6 +115,49 @@ export const AdminDashboard: React.FC = () => {
 
   // Copy to clipboard state
   const [copiedGroupCodeId, setCopiedGroupCodeId] = useState<string | null>(null);
+
+  // Security Delete Confirmation Pop-up State
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    title: string;
+    itemTypeBadge?: string;
+    itemName?: string;
+    description: string;
+    warningNotice?: string;
+    confirmButtonText?: string;
+    onConfirm: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    onConfirm: () => {}
+  });
+  const [isDeletingItem, setIsDeletingItem] = useState(false);
+
+  // Close security modal on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && deleteConfirm.isOpen && !isDeletingItem) {
+        setDeleteConfirm(prev => ({ ...prev, isOpen: false }));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deleteConfirm.isOpen, isDeletingItem]);
+
+  const handleConfirmDeleteExecution = async () => {
+    if (!deleteConfirm.onConfirm || isDeletingItem) return;
+    try {
+      setIsDeletingItem(true);
+      await deleteConfirm.onConfirm();
+      setDeleteConfirm(prev => ({ ...prev, isOpen: false }));
+    } catch (err) {
+      console.error('Error during deletion:', err);
+      toast.error('Ocurrió un error al intentar eliminar.');
+    } finally {
+      setIsDeletingItem(false);
+    }
+  };
 
   // Group Photos Drag & Drop and Queue State
   const [groupPhotosDragActive, setGroupPhotosDragActive] = useState(false);
@@ -708,43 +755,53 @@ export const AdminDashboard: React.FC = () => {
     setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: toCdnUrl(photo.url_web), group_photo_hd: toCdnUrl(photo.url_hd) } : s));
   };
 
-  const handleDeleteGroupPhoto = async (photo: GalleryPhoto) => {
-    if (!window.confirm('¿Estás seguro de eliminar esta foto grupal oficial?')) return;
-    
-    // Eliminar archivo físico de Backblaze B2 (no bloqueante)
-    deleteFromB2([photo.url_web, photo.url_hd]);
+  const handleDeleteGroupPhoto = (photo: GalleryPhoto) => {
+    const schoolNameStr = viewingGallerySchool?.name || 'Colegio';
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Eliminar Foto Grupal Oficial',
+      itemTypeBadge: 'FOTO GRUPAL OFICIAL',
+      itemName: `${schoolNameStr} — Foto Grupal`,
+      description: '¿Confirmas que deseas eliminar esta foto grupal oficial? Dejará de estar visible y disponible para descarga en el portal de egresados.',
+      warningNotice: '¡PELIGRO! El archivo en alta definición (HD) y la versión web se eliminarán definitivamente del servidor.',
+      confirmButtonText: 'Sí, Eliminar Foto Grupal',
+      onConfirm: async () => {
+        // Eliminar archivo físico de Backblaze B2 (no bloqueante)
+        deleteFromB2([photo.url_web, photo.url_hd]);
 
-    try {
-      await supabase.from('gallery_photos').delete().eq('id', photo.id);
-      toast.success('Foto grupal eliminada.');
-    } catch (err) {
-      console.warn('DB delete photo failed, removing locally:', err);
-      toast.success('Foto grupal removida localmente.');
-    }
-    setGalleryPhotos(prev => prev.filter(p => p.id !== photo.id));
-    
-    // Si era la portada, actualizar a otra foto grupal restante si existe
-    const isCover = viewingGallerySchool && (
-      viewingGallerySchool.group_photo_web === photo.url_web ||
-      toCdnUrl(viewingGallerySchool.group_photo_web) === toCdnUrl(photo.url_web) ||
-      viewingGallerySchool.group_photo_hd === photo.url_hd ||
-      toCdnUrl(viewingGallerySchool.group_photo_hd) === toCdnUrl(photo.url_hd)
-    );
+        try {
+          await supabase.from('gallery_photos').delete().eq('id', photo.id);
+          toast.success('Foto grupal eliminada.');
+        } catch (err) {
+          console.warn('DB delete photo failed, removing locally:', err);
+          toast.success('Foto grupal removida localmente.');
+        }
+        setGalleryPhotos(prev => prev.filter(p => p.id !== photo.id));
+        
+        // Si era la portada, actualizar a otra foto grupal restante si existe
+        const isCover = viewingGallerySchool && (
+          viewingGallerySchool.group_photo_web === photo.url_web ||
+          toCdnUrl(viewingGallerySchool.group_photo_web) === toCdnUrl(photo.url_web) ||
+          viewingGallerySchool.group_photo_hd === photo.url_hd ||
+          toCdnUrl(viewingGallerySchool.group_photo_hd) === toCdnUrl(photo.url_hd)
+        );
 
-    if (isCover) {
-      const isGroup = (p: GalleryPhoto) => (p.url_web?.includes('/group-photos/') || p.url_hd?.includes('/group-photos/') || (p.category === 'Grupal' && !p.url_web?.includes('/schools-gallery/')));
-      const remainingGroupPhotos = galleryPhotos.filter(p => isGroup(p) && p.id !== photo.id);
-      const nextCover = remainingGroupPhotos[0];
-      const newWeb = nextCover ? toCdnUrl(nextCover.url_web) : '';
-      const newHd = nextCover ? toCdnUrl(nextCover.url_hd) : '';
-      try {
-        await supabase.from('schools').update({ group_photo_web: newWeb, group_photo_hd: newHd }).eq('id', viewingGallerySchool.id);
-      } catch (coverErr) {
-        console.warn('No se pudo actualizar foto de portada en DB:', coverErr);
+        if (isCover) {
+          const isGroup = (p: GalleryPhoto) => (p.url_web?.includes('/group-photos/') || p.url_hd?.includes('/group-photos/') || (p.category === 'Grupal' && !p.url_web?.includes('/schools-gallery/')));
+          const remainingGroupPhotos = galleryPhotos.filter(p => isGroup(p) && p.id !== photo.id);
+          const nextCover = remainingGroupPhotos[0];
+          const newWeb = nextCover ? toCdnUrl(nextCover.url_web) : '';
+          const newHd = nextCover ? toCdnUrl(nextCover.url_hd) : '';
+          try {
+            await supabase.from('schools').update({ group_photo_web: newWeb, group_photo_hd: newHd }).eq('id', viewingGallerySchool.id);
+          } catch (coverErr) {
+            console.warn('No se pudo actualizar foto de portada en DB:', coverErr);
+          }
+          setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: newWeb, group_photo_hd: newHd } : null);
+          setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: newWeb, group_photo_hd: newHd } : s));
+        }
       }
-      setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: newWeb, group_photo_hd: newHd } : null);
-      setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: newWeb, group_photo_hd: newHd } : s));
-    }
+    });
   };
 
   // --- GESTIÓN DE VIDEOS EN COLA CON REINTENTOS (NIVEL GRUPO) ---
@@ -922,44 +979,55 @@ export const AdminDashboard: React.FC = () => {
     setShowAddVideoUrl(false);
   };
 
-  const handleDeleteGroupVideo = async (videoId: string) => {
+  const handleDeleteGroupVideo = (videoId: string, videoTitle?: string) => {
     if (!viewingGallerySchool) return;
-    if (!window.confirm('¿Estás seguro de eliminar este video del grupo?')) return;
-
     const currentVideos = getSchoolVideos(viewingGallerySchool);
     const videoToDelete = currentVideos.find(v => v.id === videoId);
-    if (videoToDelete?.url) {
-      deleteFromB2(videoToDelete.url);
-    }
-    const updatedVideos = currentVideos.filter(v => v.id !== videoId);
-    const videosJson = updatedVideos.length > 0 ? JSON.stringify(updatedVideos) : '';
+    const displayTitle = videoTitle || videoToDelete?.title || 'Video del grupo';
 
-    try {
-      const { error: err1 } = await supabase.from('schools').update({
-        videos: updatedVideos,
-        multimedia_url: videosJson
-      }).eq('id', viewingGallerySchool.id);
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Eliminar Video del Grupo',
+      itemTypeBadge: 'VIDEO OFICIAL',
+      itemName: displayTitle,
+      description: `¿Confirmas que deseas eliminar el video "${displayTitle}"? Los egresados ya no podrán reproducirlo ni descargarlo.`,
+      warningNotice: '¡PELIGRO! Se desvinculará este video del grupo y se removerá su archivo multimedia definitivamente.',
+      confirmButtonText: 'Sí, Eliminar Video',
+      onConfirm: async () => {
+        if (videoToDelete?.url) {
+          deleteFromB2(videoToDelete.url);
+        }
+        const updatedVideos = currentVideos.filter(v => v.id !== videoId);
+        const videosJson = updatedVideos.length > 0 ? JSON.stringify(updatedVideos) : '';
 
-      if (err1) {
-        await supabase.from('schools').update({
-          multimedia_url: videosJson
-        }).eq('id', viewingGallerySchool.id);
+        try {
+          const { error: err1 } = await supabase.from('schools').update({
+            videos: updatedVideos,
+            multimedia_url: videosJson
+          }).eq('id', viewingGallerySchool.id);
+
+          if (err1) {
+            await supabase.from('schools').update({
+              multimedia_url: videosJson
+            }).eq('id', viewingGallerySchool.id);
+          }
+          toast.success(`Video "${displayTitle}" eliminado.`);
+        } catch (err) {
+          try {
+            await supabase.from('schools').update({
+              multimedia_url: videosJson
+            }).eq('id', viewingGallerySchool.id);
+            toast.success(`Video "${displayTitle}" eliminado.`);
+          } catch (e) {
+            console.warn('Error deleting video in DB:', e);
+            toast.success('Video removido localmente.');
+          }
+        }
+
+        setViewingGallerySchool(prev => prev ? { ...prev, videos: updatedVideos, multimedia_url: videosJson } : null);
+        setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, videos: updatedVideos, multimedia_url: videosJson } : s));
       }
-      toast.success('Video eliminado del grupo.');
-    } catch (err) {
-      try {
-        await supabase.from('schools').update({
-          multimedia_url: videosJson
-        }).eq('id', viewingGallerySchool.id);
-        toast.success('Video eliminado del grupo.');
-      } catch (e) {
-        console.warn('Error deleting video in DB:', e);
-        toast.success('Video removido localmente.');
-      }
-    }
-
-    setViewingGallerySchool(prev => prev ? { ...prev, videos: updatedVideos, multimedia_url: videosJson } : null);
-    setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, videos: updatedVideos, multimedia_url: videosJson } : s));
+    });
   };
 
   // Manejador para crear o editar una encuesta (Supabase con fallback local)
@@ -1148,24 +1216,35 @@ export const AdminDashboard: React.FC = () => {
   };
 
   // Manejador para eliminar una encuesta
-  const handleDeleteSurvey = async (id: string, question: string) => {
-    if (!window.confirm(`¿Estás seguro de eliminar la encuesta "${question}"?`)) return;
-    
-    const updatedSurveys = surveys.filter(s => s.id !== id);
-    setSurveys(updatedSurveys);
-    localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedSurveys));
+  const handleDeleteSurvey = (id: string, question: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Eliminar Encuesta',
+      itemTypeBadge: 'ENCUESTA DE SATISFACCIÓN',
+      itemName: question || 'Encuesta de satisfacción',
+      description: `¿Confirmas que deseas eliminar por completo la encuesta "${question}"? Los egresados ya no verán esta encuesta en la galería.`,
+      warningNotice: '¡PELIGRO! Esta acción no se puede deshacer y borrará la encuesta de la base de datos.',
+      confirmButtonText: 'Sí, Eliminar Encuesta',
+      onConfirm: async () => {
+        const updatedSurveys = surveys.filter(s => s.id !== id);
+        setSurveys(updatedSurveys);
+        localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedSurveys));
 
-    try {
-      const { error } = await supabase
-        .from('surveys')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
-      setSuccessMsg('Encuesta eliminada.');
-    } catch (dbErr) {
-      console.warn('Error al borrar encuesta en Supabase:', dbErr);
-      setSuccessMsg('Encuesta removida localmente.');
-    }
+        try {
+          const { error } = await supabase
+            .from('surveys')
+            .delete()
+            .eq('id', id);
+          if (error) throw error;
+          toast.success('Encuesta eliminada.');
+          setSuccessMsg('Encuesta eliminada.');
+        } catch (dbErr) {
+          console.warn('Error al borrar encuesta en Supabase:', dbErr);
+          toast.success('Encuesta removida localmente.');
+          setSuccessMsg('Encuesta removida localmente.');
+        }
+      }
+    });
   };
 
   // Manejador para simular un voto en una encuesta
@@ -1309,7 +1388,38 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const handleRemoveSchoolItem = (index: number) => {
-    setSchoolItems(prev => prev.filter((_, i) => i !== index));
+    const item = schoolItems[index];
+    const itemName = item?.name?.trim() ? item.name : `Colegio #${index + 1}`;
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Quitar Colegio del Grupo',
+      itemTypeBadge: 'COLEGIO ASOCIADO',
+      itemName: itemName,
+      description: `¿Estás seguro de quitar "${itemName}" de este grupo?`,
+      warningNotice: 'Se quitará este colegio del formulario actual. Recuerda guardar los cambios para actualizar el grupo.',
+      confirmButtonText: 'Sí, Quitar Colegio',
+      onConfirm: () => {
+        setSchoolItems(prev => prev.filter((_, i) => i !== index));
+        toast.success(`Colegio "${itemName}" quitado del grupo.`);
+      }
+    });
+  };
+
+  const handleRemoveSurveyQuestion = (qId: string, qQuestion: string, index: number) => {
+    const displayName = qQuestion?.trim() ? qQuestion : `Pregunta #${index + 1}`;
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Quitar Pregunta de Encuesta',
+      itemTypeBadge: 'PREGUNTA DE ENCUESTA',
+      itemName: displayName,
+      description: `¿Confirmas que deseas remover la pregunta "${displayName}" de esta encuesta?`,
+      warningNotice: 'La pregunta será excluida de la encuesta en edición.',
+      confirmButtonText: 'Sí, Quitar Pregunta',
+      onConfirm: () => {
+        setSurveyQuestions(prev => prev.filter(item => item.id !== qId));
+        toast.success('Pregunta removida.');
+      }
+    });
   };
 
   const handleSchoolItemPhotoUpload = async (index: number, file: File | undefined) => {
@@ -1459,94 +1569,116 @@ export const AdminDashboard: React.FC = () => {
   };
 
   // Eliminar Colegio / Grupo
-  const handleDeleteSchool = async (schoolId: string, name: string, e: React.MouseEvent) => {
+  const handleDeleteSchool = (schoolId: string, name: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm(`¿Estás seguro de eliminar por completo el grupo "${name}" y toda su galería de fotos?\nEsta acción no se puede deshacer.`)) return;
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Eliminar Colegio / Grupo',
+      itemTypeBadge: 'COLEGIO / GRUPO COMPLETO',
+      itemName: name,
+      description: `Estás a punto de borrar definitivamente el grupo "${name}" del sistema. Se perderán el acceso de los alumnos y la galería vinculada.`,
+      warningNotice: '¡PELIGRO CRÍTICO! Esta acción es permanente e irreversible. Se eliminarán los registros de la base de datos y todas las fotos/videos de la nube.',
+      confirmButtonText: 'Sí, Eliminar Grupo Completo',
+      onConfirm: async () => {
+        // Eliminar fotos y videos físicos del bucket Backblaze B2 (no bloqueante)
+        const schoolToDelete = schools.find(s => s.id === schoolId);
+        if (schoolToDelete) {
+          const urlsToRemove: string[] = [
+            schoolToDelete.group_photo_web,
+            schoolToDelete.group_photo_hd,
+            schoolToDelete.multimedia_url,
+          ].filter((u): u is string => !!u);
 
-    // Eliminar fotos y videos físicos del bucket Backblaze B2 (no bloqueante)
-    const schoolToDelete = schools.find(s => s.id === schoolId);
-    if (schoolToDelete) {
-      const urlsToRemove: string[] = [
-        schoolToDelete.group_photo_web,
-        schoolToDelete.group_photo_hd,
-        schoolToDelete.multimedia_url,
-      ].filter((u): u is string => !!u);
+          const vids = getSchoolVideos(schoolToDelete);
+          vids.forEach(v => {
+            if (v.url) urlsToRemove.push(v.url);
+          });
 
-      const vids = getSchoolVideos(schoolToDelete);
-      vids.forEach(v => {
-        if (v.url) urlsToRemove.push(v.url);
-      });
+          deleteFromB2(urlsToRemove);
+        }
 
-      deleteFromB2(urlsToRemove);
-    }
+        try {
+          const { error } = await supabase
+            .from('schools')
+            .delete()
+            .eq('id', schoolId);
 
-    try {
-      const { error } = await supabase
-        .from('schools')
-        .delete()
-        .eq('id', schoolId);
+          if (error) throw error;
 
-      if (error) throw error;
-
-      setSchools(prev => prev.filter(s => s.id !== schoolId));
-      if (viewingGallerySchool?.id === schoolId) setViewingGallerySchool(null);
-      setSuccessMsg(`Grupo "${name}" y su galería han sido eliminados de la base de datos.`);
-    } catch (err) {
-      console.warn('DB delete failed, performing offline deletion from local state.');
-      setSchools(prev => prev.filter(s => s.id !== schoolId));
-      if (viewingGallerySchool?.id === schoolId) setViewingGallerySchool(null);
-      setSuccessMsg(`[Modo Offline] Grupo "${name}" removido de la memoria local.`);
-    }
+          setSchools(prev => prev.filter(s => s.id !== schoolId));
+          if (viewingGallerySchool?.id === schoolId) setViewingGallerySchool(null);
+          toast.success(`Grupo "${name}" eliminado correctamente.`);
+          setSuccessMsg(`Grupo "${name}" y su galería han sido eliminados de la base de datos.`);
+        } catch (err) {
+          console.warn('DB delete failed, performing offline deletion from local state.');
+          setSchools(prev => prev.filter(s => s.id !== schoolId));
+          if (viewingGallerySchool?.id === schoolId) setViewingGallerySchool(null);
+          toast.success(`[Modo Offline] Grupo "${name}" removido de la memoria local.`);
+          setSuccessMsg(`[Modo Offline] Grupo "${name}" removido de la memoria local.`);
+        }
+      }
+    });
   };
 
   // Eliminar Foto Individual de la Galería
-  const handleDeletePhoto = async (photoId: string) => {
-    if (!window.confirm('¿Estás seguro de eliminar esta foto individual de la galería?')) return;
-
-    // Eliminar archivo físico (versión Web y HD) de Backblaze B2 (no bloqueante)
+  const handleDeletePhoto = (photoId: string) => {
     const photoToDelete = galleryPhotos.find(p => p.id === photoId);
-    if (photoToDelete) {
-      deleteFromB2([photoToDelete.url_web, photoToDelete.url_hd]);
+    const groupName = viewingGallerySchool?.name || 'Grupo';
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Eliminar Foto de Galería',
+      itemTypeBadge: 'FOTO INDIVIDUAL',
+      itemName: `Galería: ${groupName}`,
+      description: '¿Confirmas que deseas eliminar esta foto individual de la galería del viaje? Dejará de ser visible para los egresados.',
+      warningNotice: '¡PELIGRO! Se eliminarán tanto la versión optimizada para web como el archivo original en HD de Backblaze B2.',
+      confirmButtonText: 'Sí, Eliminar Foto',
+      onConfirm: async () => {
+        if (photoToDelete) {
+          deleteFromB2([photoToDelete.url_web, photoToDelete.url_hd]);
 
-      // Si la foto eliminada era la portada del colegio, actualizar portada
-      if (viewingGallerySchool) {
-        const isCover = (
-          viewingGallerySchool.group_photo_web === photoToDelete.url_web ||
-          toCdnUrl(viewingGallerySchool.group_photo_web) === toCdnUrl(photoToDelete.url_web) ||
-          viewingGallerySchool.group_photo_hd === photoToDelete.url_hd ||
-          toCdnUrl(viewingGallerySchool.group_photo_hd) === toCdnUrl(photoToDelete.url_hd)
-        );
-        if (isCover) {
-          const remainingPhotos = galleryPhotos.filter(p => p.id !== photoId);
-          const nextCover = remainingPhotos.find(p => p.category === 'Grupal') || remainingPhotos[0];
-          const newWeb = nextCover ? toCdnUrl(nextCover.url_web) : '';
-          const newHd = nextCover ? toCdnUrl(nextCover.url_hd) : '';
-          try {
-            await supabase.from('schools').update({ group_photo_web: newWeb, group_photo_hd: newHd }).eq('id', viewingGallerySchool.id);
-          } catch (coverErr) {
-            console.warn('No se pudo actualizar foto de portada al eliminar foto:', coverErr);
+          // Si la foto eliminada era la portada del colegio, actualizar portada
+          if (viewingGallerySchool) {
+            const isCover = (
+              viewingGallerySchool.group_photo_web === photoToDelete.url_web ||
+              toCdnUrl(viewingGallerySchool.group_photo_web) === toCdnUrl(photoToDelete.url_web) ||
+              viewingGallerySchool.group_photo_hd === photoToDelete.url_hd ||
+              toCdnUrl(viewingGallerySchool.group_photo_hd) === toCdnUrl(photoToDelete.url_hd)
+            );
+            if (isCover) {
+              const remainingPhotos = galleryPhotos.filter(p => p.id !== photoId);
+              const nextCover = remainingPhotos.find(p => p.category === 'Grupal') || remainingPhotos[0];
+              const newWeb = nextCover ? toCdnUrl(nextCover.url_web) : '';
+              const newHd = nextCover ? toCdnUrl(nextCover.url_hd) : '';
+              try {
+                await supabase.from('schools').update({ group_photo_web: newWeb, group_photo_hd: newHd }).eq('id', viewingGallerySchool.id);
+              } catch (coverErr) {
+                console.warn('No se pudo actualizar foto de portada al eliminar foto:', coverErr);
+              }
+              setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: newWeb, group_photo_hd: newHd } : null);
+              setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: newWeb, group_photo_hd: newHd } : s));
+            }
           }
-          setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: newWeb, group_photo_hd: newHd } : null);
-          setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: newWeb, group_photo_hd: newHd } : s));
+        }
+
+        try {
+          const { error } = await supabase
+            .from('gallery_photos')
+            .delete()
+            .eq('id', photoId);
+
+          if (error) throw error;
+
+          setGalleryPhotos(prev => prev.filter(p => p.id !== photoId));
+          toast.success('Foto eliminada de la galería.');
+          setSuccessMsg('Foto eliminada de la galería con éxito.');
+        } catch (err) {
+          console.warn('DB delete photo failed, removing photo from state.');
+          setGalleryPhotos(prev => prev.filter(p => p.id !== photoId));
+          toast.success('Foto removida localmente.');
+          setSuccessMsg('Foto removida del estado local.');
         }
       }
-    }
-
-    try {
-      const { error } = await supabase
-        .from('gallery_photos')
-        .delete()
-        .eq('id', photoId);
-
-      if (error) throw error;
-
-      setGalleryPhotos(prev => prev.filter(p => p.id !== photoId));
-      setSuccessMsg('Foto eliminada de la galería con éxito.');
-    } catch (err) {
-      console.warn('DB delete photo failed, removing photo from state.');
-      setGalleryPhotos(prev => prev.filter(p => p.id !== photoId));
-      setSuccessMsg('Foto removida del estado local.');
-    }
+    });
   };
 
   // Helper para abrir modales
@@ -2441,7 +2573,7 @@ export const AdminDashboard: React.FC = () => {
 
                                 <button
                                   type="button"
-                                  onClick={() => handleDeleteGroupVideo(vid.id)}
+                                  onClick={() => handleDeleteGroupVideo(vid.id, vid.title)}
                                   className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/60 text-zinc-500 hover:text-red-400 border border-zinc-800 transition-colors"
                                   title="Eliminar este video"
                                 >
@@ -3690,7 +3822,7 @@ export const AdminDashboard: React.FC = () => {
                         {surveyQuestions.length > 1 && (
                           <button
                             type="button"
-                            onClick={() => setSurveyQuestions(prev => prev.filter(item => item.id !== q.id))}
+                            onClick={() => handleRemoveSurveyQuestion(q.id, q.question, idx)}
                             className="p-1 rounded bg-zinc-950 hover:bg-red-950/40 border border-zinc-850 hover:border-red-900/60 text-zinc-500 hover:text-red-400 transition-colors"
                           >
                             <Trash2 size={10} />
@@ -4006,6 +4138,114 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {/* ============================================================== */}
+      {/* MODAL ROJO DE SEGURIDAD PARA CONFIRMACIÓN DE ELIMINACIÓN      */}
+      {/* ============================================================== */}
+      {deleteConfirm.isOpen && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[999999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
+          onClick={() => {
+            if (!isDeletingItem) setDeleteConfirm(prev => ({ ...prev, isOpen: false }));
+          }}
+        >
+          <div 
+            className="relative w-full max-w-md bg-zinc-950 border-2 border-red-600/80 rounded-3xl shadow-[0_0_60px_rgba(220,38,38,0.4)] overflow-hidden animate-in zoom-in-95 duration-200 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Ambient Red Glow */}
+            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-red-600/25 blur-3xl rounded-full pointer-events-none" />
+
+            {/* Header bar */}
+            <div className="flex items-center justify-between px-6 py-4 bg-red-950/40 border-b border-red-900/60 relative z-10">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-red-400 font-mono">
+                  ZONA DE SEGURIDAD • ELIMINACIÓN
+                </span>
+              </div>
+              <button
+                type="button"
+                disabled={isDeletingItem}
+                onClick={() => setDeleteConfirm(prev => ({ ...prev, isOpen: false }))}
+                className="w-7 h-7 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center border border-zinc-800 transition-colors disabled:opacity-40"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4 relative z-10">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-red-950/80 border border-red-600/60 flex items-center justify-center text-red-400 shadow-[0_0_25px_rgba(239,68,68,0.35)] shrink-0">
+                  <ShieldAlert size={28} className="animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white tracking-tight leading-snug">
+                    {deleteConfirm.title}
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Doble confirmación para evitar borrados por error.
+                  </p>
+                </div>
+              </div>
+
+              {/* Target Item Highlight */}
+              <div className="p-3.5 rounded-2xl bg-zinc-900/90 border border-red-950/80 flex items-center gap-3">
+                <div className="px-2.5 py-1 rounded-md bg-red-950 border border-red-800/80 text-red-400 text-[9px] font-black uppercase tracking-wider shrink-0">
+                  {deleteConfirm.itemTypeBadge || 'ELEMENTO'}
+                </div>
+                <div className="text-xs font-bold text-white truncate flex-1" title={deleteConfirm.itemName}>
+                  {deleteConfirm.itemName || 'Elemento seleccionado'}
+                </div>
+              </div>
+
+              {/* Detailed Description */}
+              <p className="text-xs text-zinc-300 leading-relaxed">
+                {deleteConfirm.description}
+              </p>
+
+              {/* Warning Notice Box */}
+              <div className="p-3.5 rounded-2xl bg-red-950/40 border border-red-900/70 flex items-start gap-2.5 text-red-300 text-xs">
+                <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
+                <span className="font-semibold leading-relaxed">
+                  {deleteConfirm.warningNotice || '¡Atención! Esta acción es permanente e irreversible. No se podrá recuperar la información ni los archivos multimedia.'}
+                </span>
+              </div>
+
+              {/* Actions Footer */}
+              <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeletingItem}
+                  onClick={() => setDeleteConfirm(prev => ({ ...prev, isOpen: false }))}
+                  className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] border border-zinc-800 hover:border-zinc-700 text-zinc-300 font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingItem}
+                  onClick={handleConfirmDeleteExecution}
+                  className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 active:scale-[0.98] text-white font-black text-xs uppercase tracking-wider shadow-[0_0_30px_rgba(220,38,38,0.5)] border border-red-500 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {isDeletingItem ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" />
+                      <span>Eliminando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={15} />
+                      <span>{deleteConfirm.confirmButtonText || 'Sí, Eliminar'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
