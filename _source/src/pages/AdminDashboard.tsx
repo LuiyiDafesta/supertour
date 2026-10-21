@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { School, GalleryPhoto, SchoolItem, GroupVideo } from '../types/database';
+import { School, GalleryPhoto, SchoolItem, GroupVideo, Survey, normalizeSurvey } from '../types/database';
 import { Navbar } from '../components/Navbar';
 import { Uploader } from '../components/Uploader';
 import { getAnalyticsEvents, AnalyticsEvent } from '../lib/analytics';
@@ -216,14 +216,54 @@ export const AdminDashboard: React.FC = () => {
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      setSurveys(data || []);
-      localStorage.setItem('supertour_local_surveys', JSON.stringify(data || []));
+      const normalizedDb = (data || []).map(normalizeSurvey).filter(Boolean) as Survey[];
+
+      // Check if there are local offline surveys that need auto-syncing to Supabase
+      const localSurveysRaw = localStorage.getItem('supertour_local_surveys');
+      let combined = [...normalizedDb];
+      if (localSurveysRaw) {
+        try {
+          const localList = JSON.parse(localSurveysRaw);
+          if (Array.isArray(localList)) {
+            for (const localItem of localList) {
+              const isOffline = String(localItem.id).startsWith('survey-');
+              const existsInDb = normalizedDb.some(dbItem => dbItem.id === localItem.id);
+              if (isOffline || !existsInDb) {
+                // Auto-sync this local survey to Supabase so it's live!
+                const dbPayload = {
+                  question: localItem.title || localItem.question || 'Encuesta del Viaje',
+                  options: {
+                    title: localItem.title || localItem.question || 'Encuesta del Viaje',
+                    description: localItem.description || '',
+                    questions: localItem.questions || []
+                  },
+                  active: !!localItem.active
+                };
+                const { data: synced, error: syncErr } = await supabase
+                  .from('surveys')
+                  .insert(dbPayload)
+                  .select()
+                  .single();
+                if (!syncErr && synced) {
+                  const norm = normalizeSurvey(synced);
+                  if (norm) combined.unshift(norm);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Error parsing local surveys for sync:', e);
+        }
+      }
+
+      setSurveys(combined);
+      localStorage.setItem('supertour_local_surveys', JSON.stringify(combined));
     } catch (err) {
       console.warn('Error loading surveys from DB:', err);
       const localSurveysRaw = localStorage.getItem('supertour_local_surveys');
       if (localSurveysRaw) {
         try {
-          setSurveys(JSON.parse(localSurveysRaw));
+          setSurveys(JSON.parse(localSurveysRaw).map(normalizeSurvey).filter(Boolean));
         } catch {
           setSurveys([]);
         }
@@ -934,61 +974,87 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
 
-    const surveyData = {
-      title: surveyTitle,
-      description: surveyDescription || 'Por favor participá de esta encuesta del viaje.',
-      questions: validQuestions,
-      // Backward compatibility con base de datos legacy
-      question: validQuestions[0].question,
-      answer_type: validQuestions[0].answer_type,
-      options: [],
+    const titleText = surveyTitle.trim();
+    const descText = surveyDescription.trim() || 'Por favor participá de esta encuesta del viaje.';
+
+    // DB Payload strictly adhering to live Supabase surveys table (question, options, active)
+    const surveyDbPayload = {
+      question: titleText,
+      options: {
+        title: titleText,
+        description: descText,
+        questions: validQuestions
+      },
       active: editingSurvey ? editingSurvey.active : false
     };
 
     try {
       if (editingSurvey) {
-        // Editar encuesta existente
-        const { data, error } = await supabase
-          .from('surveys')
-          .update(surveyData)
-          .eq('id', editingSurvey.id)
-          .select()
-          .single();
-        if (error) throw error;
-        
-        setSurveys(prev => prev.map(s => s.id === editingSurvey.id ? data : s));
-        setSuccessMsg(`Encuesta "${surveyTitle}" actualizada correctamente en Supabase.`);
+        const isOfflineId = editingSurvey.id && String(editingSurvey.id).startsWith('survey-');
+        if (!isOfflineId) {
+          // Editar encuesta existente en Supabase
+          const { data, error } = await supabase
+            .from('surveys')
+            .update(surveyDbPayload)
+            .eq('id', editingSurvey.id)
+            .select()
+            .single();
+          if (error) throw error;
+          
+          const normalized = normalizeSurvey(data) || { ...editingSurvey, ...surveyDbPayload, id: editingSurvey.id };
+          setSurveys(prev => prev.map(s => s.id === editingSurvey.id ? normalized : s));
+          localStorage.setItem('supertour_local_surveys', JSON.stringify(surveys.map(s => s.id === editingSurvey.id ? normalized : s)));
+          setSuccessMsg(`Encuesta "${titleText}" actualizada correctamente en Supabase.`);
+        } else {
+          // Si era ID offline, insertar como nueva en Supabase
+          const { data, error } = await supabase
+            .from('surveys')
+            .insert(surveyDbPayload)
+            .select()
+            .single();
+          if (error) throw error;
+          
+          const normalized = normalizeSurvey(data) || { ...editingSurvey, ...surveyDbPayload, id: editingSurvey.id };
+          setSurveys(prev => prev.map(s => s.id === editingSurvey.id ? normalized : s));
+          localStorage.setItem('supertour_local_surveys', JSON.stringify(surveys.map(s => s.id === editingSurvey.id ? normalized : s)));
+          setSuccessMsg(`Encuesta "${titleText}" guardada en Supabase.`);
+        }
       } else {
-        // Crear nueva encuesta
+        // Crear nueva encuesta en Supabase
         const { data, error } = await supabase
           .from('surveys')
-          .insert(surveyData)
+          .insert(surveyDbPayload)
           .select()
           .single();
         if (error) throw error;
         
-        setSurveys(prev => [data, ...prev]);
-        setSuccessMsg(`Encuesta "${surveyTitle}" creada correctamente en Supabase.`);
+        const normalized = normalizeSurvey(data) || { id: `survey-${Date.now()}`, ...surveyDbPayload, created_at: new Date().toISOString() };
+        setSurveys(prev => [normalized, ...prev]);
+        localStorage.setItem('supertour_local_surveys', JSON.stringify([normalized, ...surveys]));
+        setSuccessMsg(`Encuesta "${titleText}" creada correctamente en Supabase.`);
       }
     } catch (dbErr) {
       console.warn('No se pudo guardar la encuesta en la base de datos, guardando localmente:', dbErr);
+      const fallbackItem = {
+        id: editingSurvey?.id || `survey-${Date.now()}`,
+        title: titleText,
+        description: descText,
+        questions: validQuestions,
+        question: titleText,
+        options: { title: titleText, description: descText, questions: validQuestions },
+        active: editingSurvey ? editingSurvey.active : false,
+        created_at: editingSurvey?.created_at || new Date().toISOString().split('T')[0]
+      };
       if (editingSurvey) {
-        const updatedOfflineSurveys = surveys.map(s => 
-          s.id === editingSurvey.id ? { ...s, ...surveyData } : s
-        );
-        setSurveys(updatedOfflineSurveys);
-        localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedOfflineSurveys));
-        setSuccessMsg(`[Modo Offline] Encuesta "${surveyTitle}" actualizada localmente.`);
+        const updatedOffline = surveys.map(s => s.id === editingSurvey.id ? fallbackItem : s);
+        setSurveys(updatedOffline);
+        localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedOffline));
+        setSuccessMsg(`[Modo Offline] Encuesta "${titleText}" actualizada localmente.`);
       } else {
-        const offlineSurvey = {
-          id: `survey-${Date.now()}`,
-          ...surveyData,
-          created_at: new Date().toISOString().split('T')[0]
-        };
-        const updatedSurveys = [offlineSurvey, ...surveys];
-        setSurveys(updatedSurveys);
-        localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedSurveys));
-        setSuccessMsg(`[Modo Offline] Encuesta "${surveyTitle}" registrada localmente.`);
+        const updatedOffline = [fallbackItem, ...surveys];
+        setSurveys(updatedOffline);
+        localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedOffline));
+        setSuccessMsg(`[Modo Offline] Encuesta "${titleText}" registrada localmente.`);
       }
     }
 
@@ -1038,13 +1104,41 @@ export const AdminDashboard: React.FC = () => {
       return s;
     });
     setSurveys(updatedSurveys);
+    localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedSurveys));
 
     try {
-      const { error } = await supabase
-        .from('surveys')
-        .update({ active: nextState })
-        .eq('id', id);
-      if (error) throw error;
+      const isOfflineId = String(id).startsWith('survey-');
+      if (isOfflineId) {
+        const titleText = surveyToToggle.title || surveyToToggle.question || 'Encuesta del Viaje';
+        const surveyDbPayload = {
+          question: titleText,
+          options: {
+            title: titleText,
+            description: surveyToToggle.description || '',
+            questions: surveyToToggle.questions || []
+          },
+          active: nextState
+        };
+        const { data, error } = await supabase
+          .from('surveys')
+          .insert(surveyDbPayload)
+          .select()
+          .single();
+        if (error) throw error;
+        if (data) {
+          const norm = normalizeSurvey(data);
+          if (norm) {
+            setSurveys(prev => prev.map(s => s.id === id ? norm : s));
+            localStorage.setItem('supertour_local_surveys', JSON.stringify(surveys.map(s => s.id === id ? norm : s)));
+          }
+        }
+      } else {
+        const { error } = await supabase
+          .from('surveys')
+          .update({ active: nextState })
+          .eq('id', id);
+        if (error) throw error;
+      }
       setSuccessMsg(`Encuesta "${surveyToToggle.title}" ${nextState ? 'activada para pasajeros' : 'desactivada'}.`);
     } catch (dbErr) {
       console.warn('Error al activar encuesta en Supabase:', dbErr);

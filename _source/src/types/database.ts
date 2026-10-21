@@ -37,3 +37,46 @@ export interface GalleryPhoto {
   sort_order: number;
   created_at?: string;
 }
+
+export interface SurveyQuestion {
+  id: string;
+  question: string;
+  answer_type: 'text' | 'number' | 'boolean';
+}
+
+export interface Survey {
+  id: string;
+  question?: string;
+  title: string;
+  description?: string;
+  questions: SurveyQuestion[];
+  options?: any;
+  active: boolean;
+  created_at?: string;
+}
+
+export const normalizeSurvey = (s: any): Survey | null => {
+  if (!s) return null;
+  const opts = typeof s.options === 'object' && s.options !== null && !Array.isArray(s.options) ? s.options : {};
+  const title = s.title || opts.title || s.question || 'Encuesta del Viaje';
+  const description = s.description || opts.description || 'Por favor participá de esta breve encuesta interactiva de tu viaje de egresados.';
+  
+  let questions: SurveyQuestion[] = [];
+  if (Array.isArray(s.questions) && s.questions.length > 0) {
+    questions = s.questions;
+  } else if (Array.isArray(opts.questions) && opts.questions.length > 0) {
+    questions = opts.questions;
+  } else if (Array.isArray(s.options) && s.options.length > 0) {
+    questions = [{ id: 'q-options', question: s.question || title, answer_type: 'text' }];
+  } else {
+    questions = [{ id: 'q-default', question: s.question || 'Dejanos tus comentarios sobre el viaje:', answer_type: 'text' }];
+  }
+
+  return {
+    ...s,
+    title,
+    description,
+    questions,
+    active: !!s.active
+  };
+};

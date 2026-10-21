@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { trackEvent } from '../lib/analytics';
+import { normalizeSurvey } from '../types/database';
 import { ArrowLeft, Send, ShieldCheck, CheckCircle2, User, Mail, Phone, Sparkles, MapPin } from 'lucide-react';
 import { useSEO } from '../hooks/useSEO';
 
@@ -59,18 +60,8 @@ export const SurveyPage: React.FC = () => {
 
         if (surveyError) throw surveyError;
 
-        const surveyDataFromDb = surveyData;
+        const surveyDataFromDb = normalizeSurvey(surveyData);
         if (surveyDataFromDb) {
-          // If database doesn't have the questions array or it's empty, build dynamic fallback array for backward compatibility
-          if (!surveyDataFromDb.questions || !Array.isArray(surveyDataFromDb.questions) || surveyDataFromDb.questions.length === 0) {
-            surveyDataFromDb.questions = [
-              {
-                id: 'q-legacy',
-                question: surveyDataFromDb.question || 'Dejanos tus comentarios sobre el viaje:',
-                answer_type: surveyDataFromDb.answer_type || 'text'
-              }
-            ];
-          }
           setSurvey(surveyDataFromDb);
         }
 
@@ -107,7 +98,7 @@ export const SurveyPage: React.FC = () => {
           console.warn('Error al leer encuestas locales en localStorage:', localErr);
         }
 
-        setSurvey(matched || null);
+        setSurvey(normalizeSurvey(matched) || null);
         
         if (matched) {
           const alreadyVoted = localStorage.getItem(`supertour_voted_survey_${matched.id}`);

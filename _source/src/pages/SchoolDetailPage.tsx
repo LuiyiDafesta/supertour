@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { School, GalleryPhoto } from '../types/database';
+import { School, GalleryPhoto, normalizeSurvey } from '../types/database';
 import { downloadFileDirectly } from '../lib/downloader';
 import { trackEvent } from '../lib/analytics';
 import { toCdnUrl, normalizeSchoolWithCdn, normalizeGalleryPhotoWithCdn, getSchoolVideos } from '../lib/cdn';
@@ -279,14 +279,16 @@ export const SchoolDetailPage: React.FC = () => {
         if (error) throw error;
 
         if (data && data.length > 0) {
-          const survey = data[0];
+          const survey = normalizeSurvey(data[0]);
           setActiveSurvey(survey);
           
-          // Check if passenger already voted
-          const voted = localStorage.getItem(`supertour_voted_survey_${survey.id}`);
-          if (voted) {
-            setHasVoted(true);
-            setVotedOption(voted);
+          if (survey) {
+            // Check if passenger already voted
+            const voted = localStorage.getItem(`supertour_voted_survey_${survey.id}`);
+            if (voted) {
+              setHasVoted(true);
+              setVotedOption(voted);
+            }
           }
         } else {
           // Si no hay encuestas activas en la BD, no mostrar el banner
