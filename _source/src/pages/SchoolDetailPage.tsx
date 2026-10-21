@@ -252,7 +252,7 @@ export const SchoolDetailPage: React.FC = () => {
   useEffect(() => {
     const loadSurvey = async () => {
       try {
-        // Try fetching active survey from Supabase
+        // Consultar únicamente encuestas activas reales en Supabase
         const { data, error } = await supabase
           .from('surveys')
           .select('*')
@@ -261,31 +261,8 @@ export const SchoolDetailPage: React.FC = () => {
 
         if (error) throw error;
 
-        let survey = data && data.length > 0 ? data[0] : null;
-        if (!survey) {
-          // Fallback to local storage or mock survey
-          const localSurveysRaw = localStorage.getItem('supertour_local_surveys');
-          const localSurveys = localSurveysRaw ? JSON.parse(localSurveysRaw) : null;
-          if (localSurveys && localSurveys.length > 0) {
-            survey = localSurveys.find((s: any) => s.active) || localSurveys[0];
-          } else {
-            // Default mock survey
-            survey = {
-              id: 'survey-1',
-              question: '¿Cuál fue la excursión más emocionante del viaje?',
-              options: [
-                { text: 'Parque de Aventura Pekos', votes: 145 },
-                { text: 'Aerosilla Carlos Paz', votes: 89 },
-                { text: 'Rafting en el Río Suquía', votes: 202 },
-                { text: 'Senderismo en las Sierras', votes: 41 }
-              ],
-              active: true,
-              created_at: '2026-05-20'
-            };
-          }
-        }
-
-        if (survey) {
+        if (data && data.length > 0) {
+          const survey = data[0];
           setActiveSurvey(survey);
           
           // Check if passenger already voted
@@ -294,32 +271,13 @@ export const SchoolDetailPage: React.FC = () => {
             setHasVoted(true);
             setVotedOption(voted);
           }
-          
-          const total = survey.options.reduce((sum: number, o: any) => sum + o.votes, 0);
-          setSurveyVotesTotal(total);
+        } else {
+          // Si no hay encuestas activas en la BD, no mostrar el banner
+          setActiveSurvey(null);
         }
       } catch (err) {
-        console.warn('Error fetching survey, using default mock survey.');
-        const mockSurvey = {
-          id: 'survey-1',
-          question: '¿Cuál fue la excursión más emocionante del viaje?',
-          options: [
-            { text: 'Parque de Aventura Pekos', votes: 145 },
-            { text: 'Aerosilla Carlos Paz', votes: 89 },
-            { text: 'Rafting en el Río Suquía', votes: 202 },
-            { text: 'Senderismo en las Sierras', votes: 41 }
-          ],
-          active: true,
-          created_at: '2026-05-20'
-        };
-        setActiveSurvey(mockSurvey);
-        const voted = localStorage.getItem(`supertour_voted_survey_${mockSurvey.id}`);
-        if (voted) {
-          setHasVoted(true);
-          setVotedOption(voted);
-        }
-        const total = mockSurvey.options.reduce((sum: number, o: any) => sum + o.votes, 0);
-        setSurveyVotesTotal(total);
+        console.warn('Error fetching active survey from DB:', err);
+        setActiveSurvey(null);
       }
     };
     loadSurvey();

@@ -92,9 +92,8 @@ export const SurveyPage: React.FC = () => {
           }
         }
       } catch (err) {
-        console.warn('Error loading survey from DB, fallback to local/mock database:', err);
+        console.warn('Error loading survey from DB:', err);
         
-        // 1. Intentar cargar desde el almacenamiento local de encuestas creadas
         let matched: any = null;
         try {
           const localSurveysRaw = localStorage.getItem('supertour_local_surveys');
@@ -108,48 +107,13 @@ export const SurveyPage: React.FC = () => {
           console.warn('Error al leer encuestas locales en localStorage:', localErr);
         }
 
-        // 2. Si no se encuentra, usar el listado de fallbacks mock cableados
-        if (!matched) {
-          const mockSurveys = [
-            {
-              id: 'survey-1',
-              title: 'Encuesta Final de Viaje',
-              description: 'Queremos saber tu opinión detallada sobre los distintos aspectos de tu viaje de egresados.',
-              questions: [
-                { id: 'q-1', question: '¿Cómo calificarías el desempeño general de tu coordinador?', answer_type: 'number' },
-                { id: 'q-2', question: 'Dejanos tus comentarios sobre lo que más te gustó y qué mejorarías:', answer_type: 'text' },
-                { id: 'q-3', question: '¿SuperTourChannel cumplió tus expectativas de viaje?', answer_type: 'boolean' }
-              ],
-              active: true
-            },
-            {
-              id: 'survey-2',
-              title: 'Calificación de Coordinadores',
-              description: 'Calificá el desempeño general de tu coordinador asignado durante toda la estadía.',
-              questions: [
-                { id: 'q-1', question: '¿Qué nota le ponés al servicio y acompañamiento del coordinador?', answer_type: 'number' }
-              ],
-              active: false
-            }
-          ];
-          matched = mockSurveys.find(s => s.id === surveyId) || mockSurveys[0];
-        }
-
-        setSurvey(matched);
+        setSurvey(matched || null);
         
-        const alreadyVoted = localStorage.getItem(`supertour_voted_survey_${matched.id}`);
-        if (alreadyVoted) {
-          setVotedToken(true);
-        }
-
-        // School mock fallback
-        if (schoolId) {
-          setSchool({
-            id: schoolId,
-            name: 'EGB Colegio San Martín',
-            destination: 'Villa Carlos Paz',
-            travel_date: '2026-11-10'
-          });
+        if (matched) {
+          const alreadyVoted = localStorage.getItem(`supertour_voted_survey_${matched.id}`);
+          if (alreadyVoted) {
+            setVotedToken(true);
+          }
         }
       } finally {
         setLoading(false);
@@ -306,18 +270,22 @@ export const SurveyPage: React.FC = () => {
     );
   }
 
-  if (!survey) {
+  if (!survey || survey.active === false) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center select-none text-center px-4">
         <div>
           <ShieldCheck size={48} className="text-zinc-700 mx-auto mb-4 animate-bounce" />
-          <h2 className="text-2xl font-black text-white uppercase tracking-tight">Encuesta no encontrada</h2>
-          <p className="text-xs text-zinc-500 uppercase mt-2 font-bold tracking-wider">Verificá el enlace o pedile al coordinador el ID correcto.</p>
+          <h2 className="text-2xl font-black text-white uppercase tracking-tight">
+            {!survey ? 'Encuesta no encontrada' : 'Encuesta no activa'}
+          </h2>
+          <p className="text-xs text-zinc-500 uppercase mt-2 font-bold tracking-wider">
+            {!survey ? 'Verificá el enlace o pedile al coordinador el ID correcto.' : 'Esta encuesta ha sido desactivada por los administradores.'}
+          </p>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => school ? navigate(`/colegio/${school.id}`) : navigate('/')}
             className="mt-6 px-6 py-3 rounded-xl bg-primary text-black font-black uppercase text-xs tracking-wider glow-yellow"
           >
-            Volver al Inicio
+            {school ? 'Volver a la Galería' : 'Volver al Inicio'}
           </button>
         </div>
       </div>

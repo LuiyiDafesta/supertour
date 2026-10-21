@@ -123,27 +123,8 @@ export const AdminDashboard: React.FC = () => {
   // Tab Selector State
   const [activeTab, setActiveTab] = useState<'colegios' | 'encuestas' | 'metricas'>('colegios');
 
-  // Survey States & Initial Mock Data
-  const [surveys, setSurveys] = useState<any[]>([
-    {
-      id: 'survey-1',
-      title: 'Tu Opinión sobre el Viaje',
-      description: 'Queremos saber qué tal te pareció la excursión premium a Pekos y qué podemos mejorar.',
-      question: 'Dejanos tus comentarios sobre lo que más te gustó y qué mejorarías para los próximos grupos:',
-      answer_type: 'text',
-      active: true,
-      created_at: '2026-05-20'
-    },
-    {
-      id: 'survey-2',
-      title: 'Puntuación del Coordinador',
-      description: 'Calificá el desempeño general de tu coordinador asignado durante toda la estadía.',
-      question: '¿Qué nota le ponés al servicio y acompañamiento del coordinador?',
-      answer_type: 'number',
-      active: false,
-      created_at: '2026-05-22'
-    }
-  ]);
+  // Survey States
+  const [surveys, setSurveys] = useState<any[]>([]);
   const [showSurveyModal, setShowSurveyModal] = useState(false);
   const [editingSurvey, setEditingSurvey] = useState<any | null>(null);
   const [surveyTitle, setSurveyTitle] = useState('');
@@ -283,20 +264,19 @@ export const AdminDashboard: React.FC = () => {
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      if (data && data.length > 0) {
-        setSurveys(data);
-      } else {
-        // Cargar desde cache local
-        const localSurveysRaw = localStorage.getItem('supertour_local_surveys');
-        if (localSurveysRaw) {
-          setSurveys(JSON.parse(localSurveysRaw));
-        }
-      }
+      setSurveys(data || []);
+      localStorage.setItem('supertour_local_surveys', JSON.stringify(data || []));
     } catch (err) {
-      console.warn('Error loading surveys from DB, using local surveys cache.');
+      console.warn('Error loading surveys from DB:', err);
       const localSurveysRaw = localStorage.getItem('supertour_local_surveys');
       if (localSurveysRaw) {
-        setSurveys(JSON.parse(localSurveysRaw));
+        try {
+          setSurveys(JSON.parse(localSurveysRaw));
+        } catch {
+          setSurveys([]);
+        }
+      } else {
+        setSurveys([]);
       }
     }
   };
@@ -1123,6 +1103,7 @@ export const AdminDashboard: React.FC = () => {
     
     const updatedSurveys = surveys.filter(s => s.id !== id);
     setSurveys(updatedSurveys);
+    localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedSurveys));
 
     try {
       const { error } = await supabase
@@ -1130,11 +1111,10 @@ export const AdminDashboard: React.FC = () => {
         .delete()
         .eq('id', id);
       if (error) throw error;
-      setSuccessMsg('Encuesta eliminada de Supabase.');
+      setSuccessMsg('Encuesta eliminada.');
     } catch (dbErr) {
       console.warn('Error al borrar encuesta en Supabase:', dbErr);
-      localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedSurveys));
-      setSuccessMsg('[Modo Offline] Encuesta removida del almacenamiento local.');
+      setSuccessMsg('Encuesta removida localmente.');
     }
   };
 
