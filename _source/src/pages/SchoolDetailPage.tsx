@@ -107,86 +107,7 @@ export const SchoolDetailPage: React.FC = () => {
     canonicalPath: `/colegio/${id}`
   });
 
-  // Travel categories mock photos (Unsplash high quality) to show if DB is empty
-  const mockPhotos: GalleryPhoto[] = [
-    { id: 'p1', school_id: id || '', url_web: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&auto=format&fit=crop&q=80', url_hd: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=1600&auto=format&fit=crop&q=80', category: 'Grupal', sort_order: 1 },
-    { id: 'p2', school_id: id || '', url_web: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=800&auto=format&fit=crop&q=80', url_hd: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=1600&auto=format&fit=crop&q=80', category: 'Excursiones', sort_order: 2 },
-    { id: 'p3', school_id: id || '', url_web: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&auto=format&fit=crop&q=80', url_hd: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=1600&auto=format&fit=crop&q=80', category: 'Fiestas', sort_order: 3 },
-    { id: 'p4', school_id: id || '', url_web: 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=800&auto=format&fit=crop&q=80', url_hd: 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=1600&auto=format&fit=crop&q=80', category: 'Actividades', sort_order: 4 },
-    { id: 'p5', school_id: id || '', url_web: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&auto=format&fit=crop&q=80', url_hd: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=1600&auto=format&fit=crop&q=80', category: 'Grupal', sort_order: 5 },
-    { id: 'p6', school_id: id || '', url_web: 'https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?w=800&auto=format&fit=crop&q=80', url_hd: 'https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?w=1600&auto=format&fit=crop&q=80', category: 'Excursiones', sort_order: 6 },
-    { id: 'p7', school_id: id || '', url_web: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=80', url_hd: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=1600&auto=format&fit=crop&q=80', category: 'Fiestas', sort_order: 7 },
-    { id: 'p8', school_id: id || '', url_web: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop&q=80', url_hd: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=1600&auto=format&fit=crop&q=80', category: 'Actividades', sort_order: 8 },
-  ];
-
-  const mockSchoolsMap: Record<string, School> = {
-    'mock-school-1': {
-      id: 'mock-school-1',
-      group_code: '0001',
-      name: 'EGB Colegio San Martín, Instituto Belgrano',
-      school_names: ['EGB Colegio San Martín', 'Instituto Belgrano'],
-      destination: 'Villa Carlos Paz',
-      travel_date: '2026-11-10',
-      group_photo_web: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/carlospaz-sanmartin.zip',
-    },
-    'mock-school-2': {
-      id: 'mock-school-2',
-      group_code: '0002',
-      name: 'Primaria Instituto Don Bosco',
-      school_names: ['Primaria Instituto Don Bosco'],
-      destination: 'Villa Carlos Paz',
-      travel_date: '2026-11-22',
-      group_photo_web: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/carlospaz-donbosco.zip',
-    },
-    'mock-school-3': {
-      id: 'mock-school-3',
-      group_code: '0003',
-      name: 'Primaria Instituto Dardo Rocha, Escuela Nº 5',
-      school_names: ['Primaria Instituto Dardo Rocha', 'Escuela Nº 5'],
-      destination: 'Mar del Plata',
-      travel_date: '2026-10-12',
-      group_photo_web: 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/mdp-dardorocha.zip',
-    },
-    'mock-school-4': {
-      id: 'mock-school-4',
-      group_code: '0004',
-      name: 'Colegio Stella Maris',
-      school_names: ['Colegio Stella Maris'],
-      destination: 'Mar del Plata',
-      travel_date: '2026-10-25',
-      group_photo_web: 'https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/mdp-stellamaris.zip',
-    },
-    'mock-school-5': {
-      id: 'mock-school-5',
-      group_code: '0005',
-      name: 'Colegio Santa Rosa',
-      school_names: ['Colegio Santa Rosa'],
-      destination: 'Villa Carlos Paz',
-      travel_date: '2026-12-15',
-      group_photo_web: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/carlospaz-santarosa.zip',
-    },
-    'mock-school-6': {
-      id: 'mock-school-6',
-      group_code: '0006',
-      name: 'EGB Instituto Peralta Ramos',
-      school_names: ['EGB Instituto Peralta Ramos'],
-      destination: 'Mar del Plata',
-      travel_date: '2026-12-08',
-      group_photo_web: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/mdp-peraltaramos.zip',
-    },
-  };
+  const [schoolLoadError, setSchoolLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchSchoolData = async () => {
@@ -221,58 +142,24 @@ export const SchoolDetailPage: React.FC = () => {
           .eq('id', id)
           .single();
 
-        if (schoolError) throw schoolError;
-
-        if (schoolData) {
-          setSchool(normalizeSchoolWithCdn(schoolData as School));
-          
-          // Track school view in real-time
-          trackEvent({
-            event_type: 'school_view',
-            school_id: id,
-            destination: schoolData.destination
-          });
-          
-          // 3. Fetch School Photos
-          const { data: photoData, error: photoError } = await supabase
-            .from('gallery_photos')
-            .select('*')
-            .eq('school_id', id)
-            .order('sort_order', { ascending: true });
-
-          if (photoError) throw photoError;
-
-          if (photoData && photoData.length > 0) {
-            setPhotos((photoData as GalleryPhoto[]).map(normalizeGalleryPhotoWithCdn));
-          } else {
-            setPhotos([]);
-          }
+        if (schoolError || !schoolData) {
+          throw new Error('Colegio no encontrado');
         }
-      } catch (err) {
-        console.warn('Database error, loading mock school data details page.');
-        // Fallback to local mock data matching ID
-        if (id && mockSchoolsMap[id]) {
-          const s = mockSchoolsMap[id];
-          setSchool(s);
-          setPhotos(mockPhotos);
-          
-          trackEvent({
-            event_type: 'school_view',
-            school_id: id,
-            destination: s.destination
-          });
-        } else {
-          // Fallback to general mockup
-          const s = mockSchoolsMap['mock-school-1'];
-          setSchool(s);
-          setPhotos(mockPhotos);
-          
-          trackEvent({
-            event_type: 'school_view',
-            school_id: s.id,
-            destination: s.destination
-          });
-        }
+
+        setSchool(normalizeSchoolWithCdn(schoolData as School));
+        setSchoolLoadError(null);
+        
+        // Track school view in real-time
+        trackEvent({
+          event_type: 'school_view',
+          school_id: id,
+          destination: schoolData.destination
+        });
+      } catch (err: any) {
+        console.warn('Error al cargar datos del colegio desde la base de datos:', err);
+        setSchoolLoadError('No se encontró el colegio solicitado o hubo un problema al conectar con el servidor.');
+        setSchool(null);
+        setPhotos([]);
       } finally {
         setLoading(false);
       }
@@ -281,6 +168,45 @@ export const SchoolDetailPage: React.FC = () => {
     fetchSchoolData();
     window.scrollTo(0, 0);
   }, [id]);
+
+  // Fetch photos ONLY when the school is unlocked
+  useEffect(() => {
+    const fetchPhotos = async () => {
+      if (!isUnlocked || !school?.id) return;
+      try {
+        const { data: photoData, error: photoError } = await supabase
+          .from('gallery_photos')
+          .select('*')
+          .eq('school_id', school.id)
+          .order('sort_order', { ascending: true });
+
+        if (photoError) throw photoError;
+
+        if (photoData && photoData.length > 0) {
+          setPhotos((photoData as GalleryPhoto[]).map(normalizeGalleryPhotoWithCdn));
+        } else {
+          setPhotos([]);
+        }
+      } catch (photoErr) {
+        console.warn('Error al cargar fotos de la galería:', photoErr);
+        setPhotos([]);
+      }
+    };
+
+    fetchPhotos();
+  }, [isUnlocked, school?.id]);
+
+  // Escape key listener for modals
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPreviewPhotoModal(null);
+        setPreviewVideoModal(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Check group code unlock state when school changes
   useEffect(() => {
@@ -476,15 +402,21 @@ export const SchoolDetailPage: React.FC = () => {
   if (!school) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center select-none text-center px-4">
-        <div>
+        <div className="max-w-md w-full p-8 rounded-3xl bg-zinc-950 border border-zinc-800">
+          <div className="w-14 h-14 rounded-2xl bg-amber-950/40 border border-amber-900/60 flex items-center justify-center mx-auto mb-4">
+            <AlertCircle size={26} className="text-amber-400" />
+          </div>
           <h2 className="text-2xl font-black text-white uppercase tracking-tight">
             Colegio no encontrado
           </h2>
+          <p className="mt-2 text-xs text-zinc-400 leading-relaxed">
+            {schoolLoadError || 'No se encontró la información del viaje solicitado en el sistema.'}
+          </p>
           <button
             onClick={() => navigate('/')}
-            className="mt-6 px-6 py-3 rounded-full bg-primary text-black font-black uppercase text-xs tracking-wider"
+            className="mt-6 px-6 py-3 rounded-xl bg-primary hover:bg-primary/95 text-black font-black uppercase text-xs tracking-wider glow-yellow"
           >
-            Volver al Inicio
+            Volver al Calendario
           </button>
         </div>
       </div>
@@ -507,8 +439,8 @@ export const SchoolDetailPage: React.FC = () => {
               <Lock size={28} className="text-primary" />
             </div>
 
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest mb-3">
-              <Sparkles size={10} />
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-black uppercase tracking-widest mb-3">
+              <Sparkles size={12} />
               Acceso Privado al Grupo
             </div>
 
@@ -519,7 +451,7 @@ export const SchoolDetailPage: React.FC = () => {
             {school.school_names && school.school_names.length > 1 && (
               <div className="flex flex-wrap gap-1.5 justify-center mt-2.5">
                 {school.school_names.map((sName, idx) => (
-                  <span key={idx} className="inline-flex items-center text-[10px] font-bold text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md uppercase">
+                  <span key={idx} className="inline-flex items-center text-xs font-bold text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md uppercase">
                     {sName}
                   </span>
                 ))}
@@ -538,7 +470,7 @@ export const SchoolDetailPage: React.FC = () => {
 
             {/* Error Message */}
             {pinError && (
-              <div className="mt-4 p-3.5 rounded-xl bg-red-950/50 border border-red-900/60 text-red-400 text-xs text-left flex items-start gap-2.5 animate-fade-in">
+              <div role="alert" className="mt-4 p-3.5 rounded-xl bg-red-950/50 border border-red-900/60 text-red-400 text-xs text-left flex items-start gap-2.5 animate-fade-in">
                 <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
                 <span className="leading-snug">{pinError}</span>
               </div>
@@ -547,7 +479,11 @@ export const SchoolDetailPage: React.FC = () => {
             {/* Form */}
             <form onSubmit={handleVerifyPin} className="mt-6 space-y-4">
               <div>
+                <label htmlFor="school-pin-input-field" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1.5 text-left">
+                  Código de Grupo:
+                </label>
                 <input
+                  id="school-pin-input-field"
                   type="text"
                   autoFocus
                   maxLength={12}

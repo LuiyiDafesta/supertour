@@ -2,16 +2,35 @@
   RewriteEngine On
   RewriteBase /
 
-  # OPS-01: Bloquear acceso directo al codigo fuente (_source)
+  # 1. Bloquear acceso directo a carpeta fuente y versionado
   RewriteRule ^_source(/|$) - [F,L,NC]
+  RewriteRule ^\.git(/|$) - [F,L,NC]
 
-  # Bloquear acceso a archivos y carpetas ocultos (.env, .git, etc.)
+  # 2. Bloquear archivos y carpetas ocultos (.env, .htaccess, etc.)
   RewriteRule (^|/)\. - [F,L]
 
-  # No reescribir si el archivo o directorio existe fisicamente (APIs PHP, assets, etc.)
+  # 3. Bloquear extensiones de configuracion interna, bases de datos y scripts de compilacion
+  RewriteRule \.(env|sql|log|bak|lock|ts|tsx|md|config\.(js|ts))$ - [F,L,NC]
+
+  # 4. Servir sitemap.xml y robots.txt directamente con mime types correctos
+  RewriteRule ^sitemap\.xml$ sitemap.xml [L]
+  RewriteRule ^robots\.txt$ robots.txt [L]
+
+  # 5. Reescribir rutas SPA a index.html cuando el archivo no exista fisicamente
   RewriteRule ^index\.html$ - [L]
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /index.html [L]
 </IfModule>
 
+# MIME type explicito para sitemap
+<Files "sitemap.xml">
+  ForceType application/xml
+</Files>
+
+# Cabeceras de seguridad estandar
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>

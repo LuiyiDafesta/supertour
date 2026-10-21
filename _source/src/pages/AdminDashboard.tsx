@@ -234,13 +234,16 @@ export const AdminDashboard: React.FC = () => {
         return;
       }
 
-      const { data: adminRecord, error: adminErr } = await supabase
+      const userEmail = (data.session.user.email || '').toLowerCase().trim();
+      const isAuthorizedEmail = ['lsnetinformatica2024@gmail.com', 'pax@travelrockchannel.com.ar'].includes(userEmail);
+
+      const { data: adminRecord } = await supabase
         .from('admin_users')
         .select('id')
         .eq('id', data.session.user.id)
         .maybeSingle();
 
-      if (adminErr || !adminRecord) {
+      if (!adminRecord && !isAuthorizedEmail) {
         navigate('/login', { replace: true });
       }
     };
@@ -759,7 +762,9 @@ export const AdminDashboard: React.FC = () => {
       const newHd = nextCover ? toCdnUrl(nextCover.url_hd) : '';
       try {
         await supabase.from('schools').update({ group_photo_web: newWeb, group_photo_hd: newHd }).eq('id', viewingGallerySchool.id);
-      } catch {}
+      } catch (coverErr) {
+        console.warn('No se pudo actualizar foto de portada en DB:', coverErr);
+      }
       setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: newWeb, group_photo_hd: newHd } : null);
       setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: newWeb, group_photo_hd: newHd } : s));
     }
@@ -1445,7 +1450,9 @@ export const AdminDashboard: React.FC = () => {
           const newHd = nextCover ? toCdnUrl(nextCover.url_hd) : '';
           try {
             await supabase.from('schools').update({ group_photo_web: newWeb, group_photo_hd: newHd }).eq('id', viewingGallerySchool.id);
-          } catch {}
+          } catch (coverErr) {
+            console.warn('No se pudo actualizar foto de portada al eliminar foto:', coverErr);
+          }
           setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: newWeb, group_photo_hd: newHd } : null);
           setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, group_photo_web: newWeb, group_photo_hd: newHd } : s));
         }

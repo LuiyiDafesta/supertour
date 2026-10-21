@@ -59,7 +59,7 @@ export const SurveyPage: React.FC = () => {
 
         if (surveyError) throw surveyError;
 
-        let surveyDataFromDb = surveyData;
+        const surveyDataFromDb = surveyData;
         if (surveyDataFromDb) {
           // If database doesn't have the questions array or it's empty, build dynamic fallback array for backward compatibility
           if (!surveyDataFromDb.questions || !Array.isArray(surveyDataFromDb.questions) || surveyDataFromDb.questions.length === 0) {

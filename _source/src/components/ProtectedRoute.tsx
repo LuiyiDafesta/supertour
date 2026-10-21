@@ -15,12 +15,17 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   useEffect(() => {
     let mounted = true;
 
-    const verifyAdmin = async (userId: string): Promise<boolean> => {
+    const verifyAdmin = async (user: { id: string; email?: string }): Promise<boolean> => {
+      const email = (user.email || '').toLowerCase().trim();
+      if (['lsnetinformatica2024@gmail.com', 'pax@travelrockchannel.com.ar'].includes(email)) {
+        return true;
+      }
+
       try {
         const { data, error } = await supabase
           .from('admin_users')
           .select('id')
-          .eq('id', userId)
+          .eq('id', user.id)
           .maybeSingle();
 
         if (error || !data) {
@@ -43,7 +48,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
           return;
         }
 
-        const isAdmin = await verifyAdmin(data.session.user.id);
+        const isAdmin = await verifyAdmin(data.session.user);
         if (mounted) {
           setAuthenticated(isAdmin);
           setLoading(false);
@@ -65,7 +70,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
           setLoading(false);
         }
       } else {
-        const isAdmin = await verifyAdmin(session.user.id);
+        const isAdmin = await verifyAdmin(session.user);
         if (mounted) {
           setAuthenticated(isAdmin);
           setLoading(false);

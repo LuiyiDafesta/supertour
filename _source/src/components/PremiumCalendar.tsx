@@ -1,27 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, MapPin, Sparkles, ChevronRight, X, Lock, AlertCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, Sparkles, ChevronRight, ChevronLeft, X, Lock, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { School } from '../types/database';
 import { trackEvent } from '../lib/analytics';
-import { toCdnUrl, normalizeSchoolWithCdn } from '../lib/cdn';
+import { normalizeSchoolWithCdn } from '../lib/cdn';
 
 interface PremiumCalendarProps {
   destination: 'Mar del Plata' | 'Villa Carlos Paz';
 }
 
 export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination }) => {
-  const [selectedMonth, setSelectedMonth] = useState<9 | 10 | 11>(10); // 9=Octubre, 10=Noviembre, 11=Diciembre (0-indexed base for JS Dates but we will use 9,10,11)
+  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const [selectedMonth, setSelectedMonth] = useState<number>(9); // 0-indexed: 9=Octubre, 10=Noviembre, 11=Diciembre
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   // Security PIN Modal State for Calendar
   const [selectedSchoolForPin, setSelectedSchoolForPin] = useState<School | null>(null);
   const [calendarPinInput, setCalendarPinInput] = useState<string>('');
   const [calendarPinError, setCalendarPinError] = useState<string | null>(null);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedSchoolForPin(null);
+      }
+    };
+    if (selectedSchoolForPin) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [selectedSchoolForPin]);
 
   const handleSelectSchool = (school: School) => {
     const authKey = `supertour_auth_${school.id}`;
@@ -41,7 +56,7 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
     const expected = (selectedSchoolForPin.group_code || '').trim().toUpperCase();
     const entered = calendarPinInput.trim().toUpperCase();
 
-    if (entered === expected) {
+    if (entered && entered === expected) {
       sessionStorage.setItem(`supertour_auth_${selectedSchoolForPin.id}`, 'true');
       const schoolId = selectedSchoolForPin.id;
       setSelectedSchoolForPin(null);
@@ -51,81 +66,11 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
     }
   };
 
-  // Mock data to ensure working site out of the box
-  // Mock data to ensure working site out of the box
-  const mockSchools: School[] = [
-    {
-      id: 'mock-school-1',
-      group_code: '0001',
-      name: 'EGB Colegio San Martín, Instituto Belgrano',
-      school_names: ['EGB Colegio San Martín', 'Instituto Belgrano'],
-      destination: 'Villa Carlos Paz',
-      travel_date: '2026-11-10',
-      group_photo_web: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/carlospaz-sanmartin.zip',
-    },
-    {
-      id: 'mock-school-2',
-      group_code: '0002',
-      name: 'Primaria Instituto Don Bosco',
-      school_names: ['Primaria Instituto Don Bosco'],
-      destination: 'Villa Carlos Paz',
-      travel_date: '2026-11-22',
-      group_photo_web: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/carlospaz-donbosco.zip',
-    },
-    {
-      id: 'mock-school-3',
-      group_code: '0003',
-      name: 'Primaria Instituto Dardo Rocha, Escuela Nº 5',
-      school_names: ['Primaria Instituto Dardo Rocha', 'Escuela Nº 5'],
-      destination: 'Mar del Plata',
-      travel_date: '2026-10-12',
-      group_photo_web: 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/mdp-dardorocha.zip',
-    },
-    {
-      id: 'mock-school-4',
-      group_code: '0004',
-      name: 'Colegio Stella Maris',
-      school_names: ['Colegio Stella Maris'],
-      destination: 'Mar del Plata',
-      travel_date: '2026-10-25',
-      group_photo_web: 'https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/mdp-stellamaris.zip',
-    },
-    {
-      id: 'mock-school-5',
-      group_code: '0005',
-      name: 'Colegio Santa Rosa',
-      school_names: ['Colegio Santa Rosa'],
-      destination: 'Villa Carlos Paz',
-      travel_date: '2026-12-15',
-      group_photo_web: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/carlospaz-santarosa.zip',
-    },
-    {
-      id: 'mock-school-6',
-      group_code: '0006',
-      name: 'EGB Instituto Peralta Ramos',
-      school_names: ['EGB Instituto Peralta Ramos'],
-      destination: 'Mar del Plata',
-      travel_date: '2026-12-08',
-      group_photo_web: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/mdp-peraltaramos.zip',
-    },
-  ];
-
-  // Fetch schools from database
+  // Fetch schools dynamically from Supabase database
   useEffect(() => {
     const fetchSchools = async () => {
       setLoading(true);
+      setDbError(null);
       try {
         const { data, error } = await supabase
           .from('schools')
@@ -137,61 +82,90 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
         let loadedSchools: School[] = [];
         if (data && data.length > 0) {
           loadedSchools = (data as School[]).map(normalizeSchoolWithCdn);
-        } else {
-          // Fallback to mock data matching selected destination
-          loadedSchools = mockSchools.filter((s) => s.destination === destination);
-        }
-        setSchools(loadedSchools);
+          setSchools(loadedSchools);
 
-        // Auto-select the first month that actually has registered schools!
-        const monthsToCheck: (9 | 10 | 11)[] = [9, 10, 11];
-        const monthsWithSchools = monthsToCheck.filter((m) => {
-          const monthStr = monthData[m].monthStr;
-          return loadedSchools.some((s) => {
-            if (!s.travel_date) return false;
-            const schoolDateOnly = s.travel_date.split(' ')[0].split('T')[0];
-            return schoolDateOnly.startsWith(`2026-${monthStr}-`);
-          });
-        });
-
-        if (monthsWithSchools.length > 0) {
-          // If the default month (10 / Noviembre) has schools, keep it.
-          // Otherwise, select the first month that has schools.
-          if (!monthsWithSchools.includes(10)) {
-            setSelectedMonth(monthsWithSchools[0]);
+          // Find first school with travel_date to auto-position calendar
+          const firstValidSchool = loadedSchools.find(s => !!s.travel_date);
+          if (firstValidSchool && firstValidSchool.travel_date) {
+            const parts = firstValidSchool.travel_date.split('T')[0].split(' ')[0].split('-');
+            if (parts.length >= 2) {
+              const y = parseInt(parts[0], 10);
+              const m = parseInt(parts[1], 10) - 1; // 0-indexed
+              if (!isNaN(y) && !isNaN(m)) {
+                setSelectedYear(y);
+                setSelectedMonth(m);
+              }
+            }
           }
+        } else {
+          setSchools([]);
         }
-      } catch (err) {
-        console.warn('Database connection failed, using mock school data.');
-        const loadedSchools = mockSchools.filter((s) => s.destination === destination);
-        setSchools(loadedSchools);
+      } catch (err: any) {
+        console.warn('Database error while loading calendar schools:', err);
+        setDbError('No se pudieron cargar los viajes disponibles. Por favor, reintentá más tarde.');
+        setSchools([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchSchools();
-    setSelectedDay(null); // Reset selected day when destination changes
+    setSelectedDay(null);
   }, [destination]);
 
-  // Calendar parameters for year 2026
-  // October: 31 days, starts on Thursday (index 4)
-  // November: 30 days, starts on Sunday (index 0)
-  // December: 31 days, starts on Tuesday (index 2)
-  const monthData = {
-    9: { name: 'Octubre', days: 31, startOffset: 4, year: 2026, monthStr: '10' },
-    10: { name: 'Noviembre', days: 30, startOffset: 0, year: 2026, monthStr: '11' },
-    11: { name: 'Diciembre', days: 31, startOffset: 2, year: 2026, monthStr: '12' },
+  // Extract unique periods (YYYY-MM) with available schools for quick selection pills
+  const availablePeriods = React.useMemo(() => {
+    const periodMap = new Map<string, { year: number; month: number; count: number }>();
+    schools.forEach((s) => {
+      if (!s.travel_date) return;
+      const parts = s.travel_date.split('T')[0].split(' ')[0].split('-');
+      if (parts.length >= 2) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        if (!isNaN(y) && !isNaN(m)) {
+          const key = `${y}-${m < 9 ? '0' + (m + 1) : m + 1}`;
+          const current = periodMap.get(key) || { year: y, month: m, count: 0 };
+          current.count += 1;
+          periodMap.set(key, current);
+        }
+      }
+    });
+    return Array.from(periodMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [schools]);
+
+  // Dynamic calendar math
+  const daysOfWeek = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const monthDate = new Date(selectedYear, selectedMonth, 1);
+  const rawMonthName = monthDate.toLocaleDateString('es-AR', { month: 'long' });
+  const currentMonthName = rawMonthName.charAt(0).toUpperCase() + rawMonthName.slice(1);
+  const daysInCurrentMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+  const startOffset = new Date(selectedYear, selectedMonth, 1).getDay();
+
+  const handlePrevMonth = () => {
+    setSelectedDay(null);
+    if (selectedMonth === 0) {
+      setSelectedMonth(11);
+      setSelectedYear(y => y - 1);
+    } else {
+      setSelectedMonth(m => m - 1);
+    }
   };
 
-  const currentMonth = monthData[selectedMonth];
-  const daysOfWeek = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+  const handleNextMonth = () => {
+    setSelectedDay(null);
+    if (selectedMonth === 11) {
+      setSelectedMonth(0);
+      setSelectedYear(y => y + 1);
+    } else {
+      setSelectedMonth(m => m + 1);
+    }
+  };
 
-  // Check if a specific day has schools loaded (robustly extract date-only)
+  // Helper to extract schools matching day
   const getSchoolsForDay = (day: number) => {
-    const monthStr = currentMonth.monthStr;
-    const dayStr = day < 10 ? `0${day}` : `${day}`;
-    const dateQuery = `${currentMonth.year}-${monthStr}-${dayStr}`;
+    const mStr = selectedMonth < 9 ? `0${selectedMonth + 1}` : `${selectedMonth + 1}`;
+    const dStr = day < 10 ? `0${day}` : `${day}`;
+    const dateQuery = `${selectedYear}-${mStr}-${dStr}`;
     return schools.filter((school) => {
       if (!school.travel_date) return false;
       const schoolDateOnly = school.travel_date.split(' ')[0].split('T')[0];
@@ -199,19 +173,8 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
     });
   };
 
-  // Check if a day has active trips to highlight
   const hasActiveTrips = (day: number) => {
     return getSchoolsForDay(day).length > 0;
-  };
-
-  // Helper to count schools in a specific month
-  const getSchoolCountForMonth = (m: 9 | 10 | 11) => {
-    const monthStr = monthData[m].monthStr;
-    return schools.filter((s) => {
-      if (!s.travel_date) return false;
-      const schoolDateOnly = s.travel_date.split(' ')[0].split('T')[0];
-      return schoolDateOnly.startsWith(`2026-${monthStr}-`);
-    }).length;
   };
 
   const activeDaySchools = selectedDay ? getSchoolsForDay(selectedDay) : [];
@@ -232,85 +195,80 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
           </p>
         </div>
 
-        {/* Month Selector Cards (Oct, Nov, Dec) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-12 max-w-2xl mx-auto">
-          {([9, 10, 11] as const).map((m) => {
-            const isSelected = selectedMonth === m;
-            const label = monthData[m].name;
-            const schoolCount = getSchoolCountForMonth(m);
-            const detailLabels = {
-              9: 'Primavera Egresados',
-              10: 'Temporada Alta',
-              11: 'Fin de Año & Fiest'
-            };
-            
-            return (
-              <button
-                key={m}
-                onClick={() => {
-                  setSelectedMonth(m);
-                  setSelectedDay(null);
-                }}
-                className={`group p-4.5 rounded-2xl border text-left transition-all duration-500 transform relative overflow-hidden ${
-                  isSelected
-                    ? 'bg-gradient-to-br from-zinc-900 via-zinc-950 to-black text-white border-primary shadow-[0_0_25px_rgba(250,204,21,0.18)] scale-[1.03] z-10'
-                    : 'bg-zinc-900/30 text-zinc-400 border-zinc-800/60 hover:bg-zinc-900/60 hover:text-white hover:border-zinc-700/80 hover:scale-[1.01]'
-                }`}
-              >
-                {/* Active glow gradient bar at top */}
-                <div className={`absolute top-0 left-0 right-0 h-1 transition-all duration-500 ${
-                  isSelected ? 'bg-primary glow-yellow' : 'bg-transparent group-hover:bg-zinc-800'
-                }`} />
+        {/* Database Error / Offline Notification */}
+        {dbError && (
+          <div className="max-w-xl mx-auto mb-8 p-4 rounded-2xl bg-amber-950/40 border border-amber-900/60 text-amber-300 text-xs text-center flex items-center justify-center gap-2">
+            <AlertCircle size={16} className="text-amber-400 flex-shrink-0" />
+            <span>{dbError}</span>
+          </div>
+        )}
 
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest block leading-none">
-                      Mes
-                    </span>
-                    <span className={`text-lg sm:text-xl font-black uppercase tracking-wide block mt-2 transition-colors duration-300 ${
-                      isSelected ? 'text-primary' : 'text-zinc-200 group-hover:text-white'
-                    }`}>
-                      {label}
-                    </span>
-                  </div>
-
-                  {/* School Counter Badge */}
-                  <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border transition-all duration-300 ${
-                    schoolCount > 0
-                      ? isSelected
-                        ? 'bg-primary/20 border-primary/40 text-primary glow-yellow'
-                        : 'bg-zinc-900 border-zinc-800 text-primary'
-                      : 'bg-zinc-950/60 border-zinc-900 text-zinc-600'
+        {/* Dynamic Period Quick Selector (populated if multiple months with trips exist) */}
+        {availablePeriods.length > 0 && (
+          <div className="flex flex-wrap justify-center gap-3 mb-10 max-w-2xl mx-auto">
+            {availablePeriods.map(([key, data]) => {
+              const isSelected = selectedYear === data.year && selectedMonth === data.month;
+              const pillMonthName = new Date(data.year, data.month, 1).toLocaleDateString('es-AR', { month: 'short' });
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setSelectedYear(data.year);
+                    setSelectedMonth(data.month);
+                    setSelectedDay(null);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border transition-all duration-300 flex items-center gap-2 ${
+                    isSelected
+                      ? 'bg-primary text-black border-primary glow-yellow scale-105'
+                      : 'bg-zinc-900/60 text-zinc-300 border-zinc-800 hover:border-zinc-700 hover:text-white'
+                  }`}
+                >
+                  <span>{pillMonthName} {data.year}</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                    isSelected ? 'bg-black/20 text-black' : 'bg-zinc-800 text-primary'
                   }`}>
-                    {schoolCount} {schoolCount === 1 ? 'Colegio' : 'Colegios'}
+                    {data.count}
                   </span>
-                </div>
-
-                <div className="mt-5 flex items-center justify-between text-[9px] text-zinc-500 font-bold tracking-wider uppercase">
-                  <span>{detailLabels[m]}</span>
-                  {isSelected && (
-                    <span className="text-primary font-bold animate-pulse flex items-center gap-1">
-                      Activo <span className="h-1.5 w-1.5 rounded-full bg-primary inline-block"></span>
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Interactive Almanac Card */}
         <div className="glass-card rounded-2xl p-6 sm:p-8 max-w-xl mx-auto border border-zinc-800/40 shadow-premium">
-          {/* Calendar Header */}
+          {/* Calendar Header with Navigation */}
           <div className="flex items-center justify-between mb-6 pb-4 border-b border-zinc-800/60">
-            <div className="flex items-center gap-2">
-              <CalendarIcon size={18} className="text-primary glow-text-yellow" />
-              <span className="text-lg font-black text-white uppercase tracking-wider font-outfit">
-                {currentMonth.name} {currentMonth.year}
-              </span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handlePrevMonth}
+                aria-label="Mes anterior"
+                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-colors"
+              >
+                <ChevronLeft size={18} />
+              </button>
+
+              <div className="flex items-center gap-2">
+                <CalendarIcon size={18} className="text-primary glow-text-yellow" />
+                <span className="text-lg font-black text-white uppercase tracking-wider font-outfit">
+                  {currentMonthName} {selectedYear}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleNextMonth}
+                aria-label="Mes siguiente"
+                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-colors"
+              >
+                <ChevronRight size={18} />
+              </button>
             </div>
-            <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 bg-zinc-900/80 px-2.5 py-1 rounded-full border border-zinc-800">
-              <MapPin size={10} className="text-primary" />
+
+            <div className="flex items-center gap-1.5 text-xs text-zinc-400 bg-zinc-900/80 px-3 py-1 rounded-full border border-zinc-800">
+              <MapPin size={12} className="text-primary" />
               <span className="font-bold uppercase tracking-widest">{destination}</span>
             </div>
           </div>
@@ -318,7 +276,7 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
           {/* Days of Week Grid */}
           <div className="grid grid-cols-7 gap-1 text-center mb-2">
             {daysOfWeek.map((day) => (
-              <div key={day} className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-widest py-1">
+              <div key={day} className="text-xs font-bold text-zinc-500 uppercase tracking-widest py-1">
                 {day}
               </div>
             ))}
@@ -327,12 +285,12 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
           {/* Days Grid */}
           <div className="grid grid-cols-7 gap-1">
             {/* Blank placeholders for starting day offset */}
-            {Array.from({ length: currentMonth.startOffset }).map((_, i) => (
+            {Array.from({ length: startOffset }).map((_, i) => (
               <div key={`offset-${i}`} className="aspect-square" />
             ))}
 
             {/* Render actual days */}
-            {Array.from({ length: currentMonth.days }).map((_, i) => {
+            {Array.from({ length: daysInCurrentMonth }).map((_, i) => {
               const dayNum = i + 1;
               const hasTrips = hasActiveTrips(dayNum);
               const isDaySelected = selectedDay === dayNum;
@@ -340,23 +298,24 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
               return (
                 <button
                   key={`day-${dayNum}`}
+                  type="button"
                   onClick={() => {
                     if (hasTrips) {
                       setSelectedDay(dayNum);
                       
-                      // Track calendar day clicks in real-time
                       const daySchools = getSchoolsForDay(dayNum);
                       daySchools.forEach((school) => {
                         trackEvent({
                           event_type: 'calendar_click',
                           school_id: school.id,
                           destination: school.destination,
-                          metadata: { date: `${currentMonth.year}-${currentMonth.monthStr}-${dayNum < 10 ? '0' + dayNum : dayNum}` }
+                          metadata: { date: `${selectedYear}-${selectedMonth + 1}-${dayNum}` }
                         });
                       });
                     }
                   }}
-                  disabled={!hasTrips && loading}
+                  disabled={!hasTrips || loading}
+                  aria-label={`Día ${dayNum} de ${currentMonthName} ${selectedYear}${hasTrips ? ' (con viajes)' : ''}`}
                   className={`aspect-square rounded-lg flex flex-col items-center justify-center relative font-bold text-sm transition-all duration-300 ${
                     isDaySelected
                       ? 'bg-primary text-black font-black glow-yellow scale-105 z-10'
@@ -384,7 +343,7 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
           ) : (
             <div className="space-y-4">
               <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest text-center mb-6">
-                Colegios del día {selectedDay} de {currentMonth.name} ({activeDaySchools.length})
+                Colegios del día {selectedDay} de {currentMonthName} ({activeDaySchools.length})
               </h3>
               
               {activeDaySchools.length === 0 ? (
@@ -414,8 +373,8 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
                               {school.name}
                             </h4>
                           )}
-                          <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400 font-bold uppercase tracking-wider mt-0.5">
-                            <MapPin size={10} className="text-primary" />
+                          <span className="inline-flex items-center gap-1 text-xs text-zinc-400 font-bold uppercase tracking-wider mt-0.5">
+                            <MapPin size={12} className="text-primary" />
                             {school.destination}
                           </span>
                         </div>
@@ -435,18 +394,23 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
         </div>
       </div>
 
-      {/* MODAL DE SEGURIDAD PARA INGRESO DE CÓDIGO DE GRUPO */}
+      {/* ACCESSIBLE MODAL DE SEGURIDAD PARA INGRESO DE CÓDIGO DE GRUPO */}
       {selectedSchoolForPin && createPortal(
         <div 
           className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in select-none"
           onClick={() => setSelectedSchoolForPin(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="calendar-pin-modal-title"
         >
           <div 
             className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6 sm:p-8 max-w-md w-full shadow-2xl relative text-center"
             onClick={(e) => e.stopPropagation()}
           >
             <button
+              type="button"
               onClick={() => setSelectedSchoolForPin(null)}
+              aria-label="Cerrar modal de código"
               className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
             >
               <X size={16} />
@@ -456,19 +420,19 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
               <Lock size={26} className="text-primary" />
             </div>
 
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest mb-2">
-              <Sparkles size={10} />
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-black uppercase tracking-widest mb-2">
+              <Sparkles size={12} />
               Acceso Privado al Grupo
             </div>
 
-            <h3 className="text-lg sm:text-xl font-black uppercase text-white tracking-tight">
+            <h3 id="calendar-pin-modal-title" className="text-lg sm:text-xl font-black uppercase text-white tracking-tight">
               {selectedSchoolForPin.name}
             </h3>
 
             {selectedSchoolForPin.school_names && selectedSchoolForPin.school_names.length > 1 && (
               <div className="flex flex-wrap gap-1.5 justify-center mt-2">
                 {selectedSchoolForPin.school_names.map((sName, idx) => (
-                  <span key={idx} className="inline-flex items-center text-[10px] font-bold text-zinc-300 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-md uppercase">
+                  <span key={idx} className="inline-flex items-center text-xs font-bold text-zinc-300 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-md uppercase">
                     {sName}
                   </span>
                 ))}
@@ -480,25 +444,31 @@ export const PremiumCalendar: React.FC<PremiumCalendarProps> = ({ destination })
             </p>
 
             {calendarPinError && (
-              <div className="mt-4 p-3 rounded-xl bg-red-950/60 border border-red-900/80 text-red-400 text-xs text-left flex items-start gap-2 animate-fade-in">
+              <div className="mt-4 p-3 rounded-xl bg-red-950/60 border border-red-900/80 text-red-400 text-xs text-left flex items-start gap-2 animate-fade-in" role="alert">
                 <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
                 <span>{calendarPinError}</span>
               </div>
             )}
 
             <form onSubmit={handleCalendarPinSubmit} className="mt-5 space-y-3.5">
-              <input
-                type="text"
-                autoFocus
-                maxLength={12}
-                value={calendarPinInput}
-                onChange={(e) => {
-                  setCalendarPinInput(e.target.value);
-                  if (calendarPinError) setCalendarPinError(null);
-                }}
-                placeholder="EJ: 0001"
-                className="w-full text-center text-2xl font-mono font-black uppercase tracking-widest py-3.5 px-4 rounded-xl bg-zinc-900 border border-zinc-700 focus:border-primary text-white focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all shadow-inner placeholder:text-zinc-500"
-              />
+              <div>
+                <label htmlFor="calendar-pin-input-field" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1.5 text-left">
+                  Código de Grupo:
+                </label>
+                <input
+                  id="calendar-pin-input-field"
+                  type="text"
+                  autoFocus
+                  maxLength={12}
+                  value={calendarPinInput}
+                  onChange={(e) => {
+                    setCalendarPinInput(e.target.value);
+                    if (calendarPinError) setCalendarPinError(null);
+                  }}
+                  placeholder="EJ: 0001"
+                  className="w-full text-center text-2xl font-mono font-black uppercase tracking-widest py-3.5 px-4 rounded-xl bg-zinc-900 border border-zinc-700 focus:border-primary text-white focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all shadow-inner placeholder:text-zinc-500"
+                />
+              </div>
 
               <button
                 type="submit"
