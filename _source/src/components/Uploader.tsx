@@ -28,51 +28,7 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, default
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Add files to the upload queue
-  const handleFilesAdded = (files: FileList | null) => {
-    if (!files) return;
-
-    const newItems: FileQueueItem[] = Array.from(files).map((file, idx) => {
-      const id = `${file.name}-${file.size}-${Date.now()}-${idx}`;
-      return {
-        id,
-        file,
-        name: file.name,
-        size: file.size,
-        progress: 0,
-        status: 'esperando',
-        category: defaultCategory || 'Actividades',
-        previewUrl: URL.createObjectURL(file),
-      };
-    });
-
-    setQueue((prev) => [...prev, ...newItems]);
-  };
-
-  // Drag and drop handlers
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    handleFilesAdded(e.dataTransfer.files);
-  };
-
-  // Remove single file from queue
-  const handleRemoveItem = (id: string) => {
-    setQueue((prev) => {
-      const item = prev.find((x) => x.id === id);
-      if (item) URL.revokeObjectURL(item.previewUrl);
-      return prev.filter((x) => x.id !== id);
-    });
-  };
-
-  // Clear entire queue
-  const handleClearQueue = () => {
-    queue.forEach((item) => URL.revokeObjectURL(item.previewUrl));
-    setQueue([]);
-  };
+  const [isDragActive, setIsDragActive] = useState(false);
 
   // Helper to upload file via upload.php to Backblaze B2
   const uploadToB2 = async (file: File, remotePath: string): Promise<string> => {
@@ -80,7 +36,6 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, default
     formData.append('file', file);
     formData.append('filename', remotePath);
 
-    // Enviar petición POST a upload.php
     const response = await fetch('/upload.php', {
       method: 'POST',
       body: formData
@@ -105,32 +60,31 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, default
     }
   };
 
-  // Trigger compression and upload process
-  const startUpload = async () => {
-    if (queue.length === 0 || uploading) return;
+  // Process a list of items through compression, upload and Supabase registration
+  const processFiles = async (itemsToUpload: FileQueueItem[]) => {
+    if (itemsToUpload.length === 0) return;
     setUploading(true);
 
-    // Process items that are waiting or failed
-    for (let i = 0; i < queue.length; i++) {
-      const item = queue[i];
+    for (let i = 0; i < itemsToUpload.length; i++) {
+      const item = itemsToUpload[i];
       if (item.status === 'exito') continue;
 
       // 1. Fase de compresión en el cliente
       setQueue((prev) =>
-        prev.map((x) => (x.id === item.id ? { ...x, status: 'comprimiendo', progress: 10, errorMsg: undefined } : x))
+        prev.map((x) => (x.id === item.id ? { ...x, status: 'comprimiendo', progress: 15, errorMsg: undefined } : x))
       );
 
       try {
         // Comprimir la foto original HD para generar la de bajo peso (Web)
-        const compressedFile = await compressImage(item.file, 1200, 0.75);
+        const compressedFile = await compressImage(item.file, 1600, 0.82);
         
         setQueue((prev) =>
-          prev.map((x) => (x.id === item.id ? { ...x, progress: 30 } : x))
+          prev.map((x) => (x.id === item.id ? { ...x, progress: 35 } : x))
         );
 
         // 2. Fase de subida a Backblaze B2
         setQueue((prev) =>
-          prev.map((x) => (x.id === item.id ? { ...x, status: 'subiendo', progress: 45 } : x))
+          prev.map((x) => (x.id === item.id ? { ...x, status: 'subiendo', progress: 50 } : x))
         );
 
         const timestamp = Date.now();
@@ -140,18 +94,15 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, default
         const remotePathWeb = `schools-gallery/${schoolId}/web/${timestamp}-${cleanName}`;
         const remotePathHd = `schools-gallery/${schoolId}/hd/${timestamp}-${cleanName}`;
 
-        let webUrl = '';
-        let hdUrl = '';
-
         // Subir la versión Web optimizada
-        webUrl = await uploadToB2(compressedFile, remotePathWeb);
+        const webUrl = await uploadToB2(compressedFile, remotePathWeb);
         
         setQueue((prev) =>
-          prev.map((x) => (x.id === item.id ? { ...x, progress: 70 } : x))
+          prev.map((x) => (x.id === item.id ? { ...x, progress: 75 } : x))
         );
 
         // Subir la versión HD original
-        hdUrl = await uploadToB2(item.file, remotePathHd);
+        const hdUrl = await uploadToB2(item.file, remotePathHd);
         
         setQueue((prev) =>
           prev.map((x) => (x.id === item.id ? { ...x, progress: 90 } : x))
@@ -186,6 +137,9 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, default
             x.id === item.id ? { ...x, status: 'exito', progress: 100, errorMsg: undefined } : x
           )
         );
+
+        // Notificar al componente padre para que la galería inferior se refresque inmediatamente
+        onUploadComplete();
       } catch (err: any) {
         console.error('Error en proceso de compresión/carga:', err);
         setQueue((prev) =>
@@ -202,24 +156,96 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, default
     onUploadComplete();
   };
 
+  // Add files and immediately trigger upload
+  const handleFilesAdded = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const validFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (validFiles.length === 0) return;
+
+    const newItems: FileQueueItem[] = validFiles.map((file, idx) => {
+      const id = `${file.name}-${file.size}-${Date.now()}-${idx}`;
+      return {
+        id,
+        file,
+        name: file.name,
+        size: file.size,
+        progress: 0,
+        status: 'esperando',
+        category: defaultCategory || 'Actividades',
+        previewUrl: URL.createObjectURL(file),
+      };
+    });
+
+    setQueue((prev) => [...prev, ...newItems]);
+    processFiles(newItems);
+  };
+
+  // Drag and drop handlers with event propagation prevention and dragActive state
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(true);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFilesAdded(e.dataTransfer.files);
+    }
+  };
+
+  // Remove single file from queue
+  const handleRemoveItem = (id: string) => {
+    setQueue((prev) => {
+      const item = prev.find((x) => x.id === id);
+      if (item) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter((x) => x.id !== id);
+    });
+  };
+
+  // Clear entire queue
+  const handleClearQueue = () => {
+    queue.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    setQueue([]);
+  };
+
   // Reintentar todas las fotos fallidas
   const handleRetryFailed = () => {
+    const failedItems = queue.filter((x) => x.status === 'error');
+    if (failedItems.length === 0 || uploading) return;
     setQueue((prev) =>
       prev.map((x) => (x.status === 'error' ? { ...x, status: 'esperando', progress: 0, errorMsg: undefined } : x))
     );
-    setTimeout(() => {
-      startUpload();
-    }, 50);
+    processFiles(failedItems);
   };
 
   // Reintentar una foto específica que falló
   const handleRetrySingleItem = (id: string) => {
+    const item = queue.find((x) => x.id === id);
+    if (!item || uploading) return;
     setQueue((prev) =>
       prev.map((x) => (x.id === id ? { ...x, status: 'esperando', progress: 0, errorMsg: undefined } : x))
     );
-    setTimeout(() => {
-      startUpload();
-    }, 50);
+    processFiles([item]);
   };
 
   // Format Bytes to human readable MB/KB
@@ -246,26 +272,41 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, default
       
       {/* Drag & Drop File Portal */}
       <div
+        onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
-        className="w-full py-8 px-6 rounded-2xl border-2 border-dashed border-zinc-800 hover:border-primary/60 bg-zinc-900/20 hover:bg-zinc-900/40 text-center cursor-pointer transition-all duration-300 group"
+        className={`w-full py-9 px-6 rounded-2xl border-2 border-dashed text-center cursor-pointer transition-all duration-300 group ${
+          isDragActive
+            ? 'border-primary bg-primary/10 scale-[1.01] shadow-[0_0_30px_rgba(250,204,21,0.25)] ring-2 ring-primary/40'
+            : 'border-zinc-800 hover:border-primary/60 bg-zinc-900/20 hover:bg-zinc-900/40'
+        }`}
       >
         <input
           type="file"
           ref={fileInputRef}
-          onChange={(e) => handleFilesAdded(e.target.files)}
+          onChange={(e) => {
+            handleFilesAdded(e.target.files);
+            e.target.value = '';
+          }}
           multiple
           accept="image/*"
           className="hidden"
         />
-        <Upload size={32} className="mx-auto text-primary group-hover:scale-110 transition-transform duration-300 mb-2" />
-        <p className="text-sm font-black text-white uppercase tracking-wider">
-          Arrastrá tus fotos acá o <span className="text-primary hover:underline">explorá los archivos</span>
-        </p>
-        <p className="text-[11px] font-semibold text-zinc-400 mt-1 uppercase">
-          Formatos soportados: JPG, PNG, WEBP. Podés seleccionar decenas de fotos al mismo tiempo.
-        </p>
+        <div className="pointer-events-none">
+          <Upload size={34} className={`mx-auto mb-2.5 transition-transform duration-300 ${isDragActive ? 'text-primary scale-125 animate-bounce' : 'text-primary group-hover:scale-110'}`} />
+          <p className="text-sm font-black text-white uppercase tracking-wider">
+            {isDragActive ? (
+              <span className="text-primary font-black animate-pulse">¡Soltá las fotos acá para subirlas ahora!</span>
+            ) : (
+              <>Arrastrá tus fotos acá o <span className="text-primary hover:underline">explorá los archivos</span></>
+            )}
+          </p>
+          <p className="text-[11px] font-semibold text-zinc-400 mt-1 uppercase">
+            Formatos soportados: JPG, PNG, WEBP. Podés arrastrar decenas de fotos juntas.
+          </p>
+        </div>
       </div>
 
       {/* Global Queue Dashboard Info */}
@@ -460,12 +501,15 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, default
           )}
 
           <button
-            onClick={startUpload}
+            onClick={() => {
+              const pendingItems = queue.filter((x) => x.status === 'esperando' || x.status === 'error');
+              if (pendingItems.length > 0) processFiles(pendingItems);
+            }}
             disabled={uploading || remainingFiles === 0}
             className="flex items-center gap-2 px-7 py-3 rounded-xl bg-primary hover:bg-primary/95 disabled:bg-zinc-900 disabled:text-zinc-500 text-black font-black text-xs uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(250,204,21,0.2)] hover:shadow-[0_0_25px_rgba(250,204,21,0.3)] glow-yellow"
           >
             <ShieldCheck size={16} />
-            {uploading ? 'Subiendo Lote...' : 'Iniciar Carga Masiva'}
+            {uploading ? 'Subiendo Lote...' : remainingFiles === 0 ? 'Lote Completado' : 'Procesar Pendientes'}
           </button>
         </div>
       )}
