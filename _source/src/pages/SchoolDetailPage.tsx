@@ -636,7 +636,15 @@ export const SchoolDetailPage: React.FC = () => {
                         Ver Completa
                       </button>
                       <button
-                        onClick={() => downloadFileDirectly(activeGroupPhoto.url_hd || activeGroupPhoto.url_web || school.group_photo_hd, `SuperTour-${school.name}-Grupal-${safeGroupPhotoIdx + 1}.jpg`)}
+                        onClick={() => {
+                          downloadFileDirectly(activeGroupPhoto.url_hd || activeGroupPhoto.url_web || school.group_photo_hd, `SuperTour-${school.name}-Grupal-${safeGroupPhotoIdx + 1}.jpg`);
+                          trackEvent({
+                            event_type: 'photo_download',
+                            school_id: school.id,
+                            destination: school.destination,
+                            metadata: { type: 'grupal', title: `Foto Grupal #${safeGroupPhotoIdx + 1}`, size: 'HD' }
+                          });
+                        }}
                         className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-black text-xs font-black uppercase tracking-wider transition-all glow-yellow"
                       >
                         <Download size={14} />
@@ -765,7 +773,15 @@ export const SchoolDetailPage: React.FC = () => {
                         )}
                         <button
                           type="button"
-                          onClick={() => downloadFileDirectly(vid.url, `${vid.title || 'Video'}${isZip ? '.zip' : '.mp4'}`)}
+                          onClick={() => {
+                            downloadFileDirectly(vid.url, `${vid.title || 'Video'}${isZip ? '.zip' : '.mp4'}`);
+                            trackEvent({
+                              event_type: 'photo_download',
+                              school_id: school.id,
+                              destination: school.destination,
+                              metadata: { type: 'video', title: vid.title, size: isZip ? 'ZIP' : 'MP4' }
+                            });
+                          }}
                           className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors glow-yellow"
                         >
                           <Download size={13} />
@@ -893,7 +909,7 @@ export const SchoolDetailPage: React.FC = () => {
             </p>
           </div>
 
-          <PremiumGallery photos={tripPhotos} schoolName={school.name} />
+          <PremiumGallery photos={tripPhotos} schoolName={school.name} destination={school.destination} />
         </section>
 
         {/* MODAL DE ZOOM / VISTA COMPLETA DE FOTO GRUPAL */}
@@ -914,7 +930,15 @@ export const SchoolDetailPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => downloadFileDirectly(previewPhotoModal.url_hd || previewPhotoModal.url_web, `SuperTour-${school.name}-Grupal.jpg`)}
+                    onClick={() => {
+                      downloadFileDirectly(previewPhotoModal.url_hd || previewPhotoModal.url_web, `SuperTour-${school.name}-Grupal.jpg`);
+                      trackEvent({
+                        event_type: 'photo_download',
+                        school_id: school.id,
+                        destination: school.destination,
+                        metadata: { type: 'grupal', title: 'Foto Grupal Ampliada', size: 'HD' }
+                      });
+                    }}
                     className="px-3.5 py-1.5 rounded-xl bg-primary text-black font-black text-xs uppercase tracking-wider flex items-center gap-1.5 glow-yellow"
                   >
                     <Download size={13} />

@@ -28,9 +28,10 @@ import {
 interface PremiumGalleryProps {
   photos: GalleryPhoto[];
   schoolName: string;
+  destination?: string;
 }
 
-export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolName }) => {
+export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolName, destination }) => {
   const [columnCount, setColumnCount] = useState<number>(3); // Default 3 columns
   
   // Lightbox State
@@ -183,6 +184,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
         trackEvent({
           event_type: 'photo_download',
           school_id: photo.school_id,
+          destination: destination || undefined,
           metadata: { photo_id: photo.id, batch: batchTitle }
         });
       } catch (err) {
@@ -367,6 +369,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
                       trackEvent({
                         event_type: 'photo_click',
                         school_id: photo.school_id,
+                        destination: destination || undefined,
                         metadata: { photo_id: photo.id }
                       });
                     }
@@ -440,6 +443,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
                               trackEvent({
                                 event_type: 'photo_download',
                                 school_id: photo.school_id,
+                                destination: destination || undefined,
                                 metadata: { photo_id: photo.id, size: 'HD' }
                               });
                             }}
@@ -622,6 +626,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
                 trackEvent({
                   event_type: 'photo_download',
                   school_id: photos[lightboxIndex].school_id,
+                  destination: destination || undefined,
                   metadata: { photo_id: photos[lightboxIndex].id, size: 'HD', context: 'lightbox' }
                 });
               }}
