@@ -176,6 +176,7 @@ export const AdminDashboard: React.FC = () => {
   const [editingSurvey, setEditingSurvey] = useState<any | null>(null);
   const [surveyTitle, setSurveyTitle] = useState('');
   const [surveyDescription, setSurveyDescription] = useState('');
+  const [surveyActive, setSurveyActive] = useState(true);
   const [surveyQuestions, setSurveyQuestions] = useState<any[]>([
     { id: 'q-1', question: '', answer_type: 'text' }
   ]);
@@ -1053,10 +1054,22 @@ export const AdminDashboard: React.FC = () => {
         description: descText,
         questions: validQuestions
       },
-      active: editingSurvey ? editingSurvey.active : false
+      active: surveyActive
     };
 
     try {
+      // Si la encuesta se guarda como activa, desactivar las demás en Supabase para evitar colisiones
+      if (surveyActive) {
+        try {
+          await supabase
+            .from('surveys')
+            .update({ active: false })
+            .neq('id', editingSurvey?.id || '00000000-0000-0000-0000-000000000000');
+        } catch (deactErr) {
+          console.warn('Could not deactivate other surveys:', deactErr);
+        }
+      }
+
       if (editingSurvey) {
         const isOfflineId = editingSurvey.id && String(editingSurvey.id).startsWith('survey-');
         if (!isOfflineId) {
@@ -1070,8 +1083,9 @@ export const AdminDashboard: React.FC = () => {
           if (error) throw error;
           
           const normalized = normalizeSurvey(data) || { ...editingSurvey, ...surveyDbPayload, id: editingSurvey.id };
-          setSurveys(prev => prev.map(s => s.id === editingSurvey.id ? normalized : s));
-          localStorage.setItem('supertour_local_surveys', JSON.stringify(surveys.map(s => s.id === editingSurvey.id ? normalized : s)));
+          setSurveys(prev => prev.map(s => s.id === editingSurvey.id ? normalized : (surveyActive ? { ...s, active: false } : s)));
+          localStorage.setItem('supertour_local_surveys', JSON.stringify(surveys.map(s => s.id === editingSurvey.id ? normalized : (surveyActive ? { ...s, active: false } : s))));
+          toast.success(`Encuesta "${titleText}" actualizada correctamente.`);
           setSuccessMsg(`Encuesta "${titleText}" actualizada correctamente en Supabase.`);
         } else {
           // Si era ID offline, insertar como nueva en Supabase
@@ -1083,8 +1097,9 @@ export const AdminDashboard: React.FC = () => {
           if (error) throw error;
           
           const normalized = normalizeSurvey(data) || { ...editingSurvey, ...surveyDbPayload, id: editingSurvey.id };
-          setSurveys(prev => prev.map(s => s.id === editingSurvey.id ? normalized : s));
-          localStorage.setItem('supertour_local_surveys', JSON.stringify(surveys.map(s => s.id === editingSurvey.id ? normalized : s)));
+          setSurveys(prev => prev.map(s => s.id === editingSurvey.id ? normalized : (surveyActive ? { ...s, active: false } : s)));
+          localStorage.setItem('supertour_local_surveys', JSON.stringify(surveys.map(s => s.id === editingSurvey.id ? normalized : (surveyActive ? { ...s, active: false } : s))));
+          toast.success(`Encuesta "${titleText}" guardada en Supabase.`);
           setSuccessMsg(`Encuesta "${titleText}" guardada en Supabase.`);
         }
       } else {
@@ -1097,8 +1112,9 @@ export const AdminDashboard: React.FC = () => {
         if (error) throw error;
         
         const normalized = normalizeSurvey(data) || { id: `survey-${Date.now()}`, ...surveyDbPayload, created_at: new Date().toISOString() };
-        setSurveys(prev => [normalized, ...prev]);
-        localStorage.setItem('supertour_local_surveys', JSON.stringify([normalized, ...surveys]));
+        setSurveys(prev => [normalized, ...(surveyActive ? prev.map(s => ({ ...s, active: false })) : prev)]);
+        localStorage.setItem('supertour_local_surveys', JSON.stringify([normalized, ...(surveyActive ? surveys.map(s => ({ ...s, active: false })) : surveys)]));
+        toast.success(`Encuesta "${titleText}" creada correctamente.`);
         setSuccessMsg(`Encuesta "${titleText}" creada correctamente en Supabase.`);
       }
     } catch (dbErr) {
@@ -1110,18 +1126,20 @@ export const AdminDashboard: React.FC = () => {
         questions: validQuestions,
         question: titleText,
         options: { title: titleText, description: descText, questions: validQuestions },
-        active: editingSurvey ? editingSurvey.active : false,
+        active: surveyActive,
         created_at: editingSurvey?.created_at || new Date().toISOString().split('T')[0]
       };
       if (editingSurvey) {
-        const updatedOffline = surveys.map(s => s.id === editingSurvey.id ? fallbackItem : s);
+        const updatedOffline = surveys.map(s => s.id === editingSurvey.id ? fallbackItem : (surveyActive ? { ...s, active: false } : s));
         setSurveys(updatedOffline);
         localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedOffline));
+        toast.success(`Encuesta actualizada localmente.`);
         setSuccessMsg(`[Modo Offline] Encuesta "${titleText}" actualizada localmente.`);
       } else {
-        const updatedOffline = [fallbackItem, ...surveys];
+        const updatedOffline = [fallbackItem, ...(surveyActive ? surveys.map(s => ({ ...s, active: false })) : surveys)];
         setSurveys(updatedOffline);
         localStorage.setItem('supertour_local_surveys', JSON.stringify(updatedOffline));
+        toast.success(`Encuesta registrada.`);
         setSuccessMsg(`[Modo Offline] Encuesta "${titleText}" registrada localmente.`);
       }
     }
@@ -1130,6 +1148,7 @@ export const AdminDashboard: React.FC = () => {
     setEditingSurvey(null);
     setSurveyTitle('');
     setSurveyDescription('');
+    setSurveyActive(true);
     setSurveyQuestions([{ id: 'q-1', question: '', answer_type: 'text' }]);
   };
 
@@ -1137,7 +1156,11 @@ export const AdminDashboard: React.FC = () => {
     setEditingSurvey(null);
     setSurveyTitle('');
     setSurveyDescription('');
-    setSurveyQuestions([{ id: 'q-1', question: '', answer_type: 'text' }]);
+    setSurveyActive(true);
+    setSurveyQuestions([
+      { id: 'q-1', question: '', answer_type: 'text' },
+      { id: 'q-2', question: '', answer_type: 'number' }
+    ]);
     setShowSurveyModal(true);
   };
 
@@ -1145,6 +1168,7 @@ export const AdminDashboard: React.FC = () => {
     setEditingSurvey(survey);
     setSurveyTitle(survey.title);
     setSurveyDescription(survey.description || '');
+    setSurveyActive(!!survey.active);
     if (survey.questions && Array.isArray(survey.questions) && survey.questions.length > 0) {
       setSurveyQuestions(JSON.parse(JSON.stringify(survey.questions)));
     } else {
@@ -3741,11 +3765,11 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL DE CREACIÓN DE ENCUESTA */}
+      {/* MODAL DE CREACIÓN / EDICIÓN DE ENCUESTA */}
       {showSurveyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity">
           <div 
-            className="relative w-full max-w-lg border border-zinc-800 rounded-2xl bg-zinc-950 shadow-premium overflow-hidden transform transition-all flex flex-col max-h-[90vh]"
+            className="relative w-full max-w-xl border border-zinc-800 rounded-2xl bg-zinc-950 shadow-premium overflow-hidden transform transition-all flex flex-col max-h-[92vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header Modal */}
@@ -3753,10 +3777,10 @@ export const AdminDashboard: React.FC = () => {
               <div>
                 <h3 className="text-sm font-black uppercase text-white tracking-widest flex items-center gap-1.5 leading-none">
                   <Sparkles size={14} className="text-primary" />
-                  Nueva Encuesta Estudiantil
+                  {editingSurvey ? 'Editar Encuesta Estudiantil' : 'Nueva Encuesta Estudiantil'}
                 </h3>
                 <p className="text-[10px] text-zinc-500 uppercase mt-1 leading-none">
-                  Generá un cuestionario con formato de Texto, Escala del 1 al 10 o Verdadero/Falso.
+                  Generá un cuestionario interactivo con formato de Texto, Escala del 1 al 10 o Verdadero/Falso.
                 </p>
               </div>
               <button 
@@ -3814,23 +3838,27 @@ export const AdminDashboard: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="space-y-3.5 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
+                <div className="space-y-3.5 max-h-[380px] overflow-y-auto pr-1 scrollbar-thin">
                   {surveyQuestions.map((q, idx) => (
-                    <div key={q.id || idx} className="p-3.5 bg-zinc-900/60 border border-zinc-850 rounded-xl space-y-3 relative group">
+                    <div key={q.id || idx} className="p-4 bg-zinc-900/60 border border-zinc-850 rounded-xl space-y-3 relative group">
                       <div className="flex items-center justify-between gap-2 select-none">
-                        <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest leading-none">Pregunta #{idx + 1}</span>
+                        <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest leading-none">Pregunta #{idx + 1}</span>
                         {surveyQuestions.length > 1 && (
                           <button
                             type="button"
                             onClick={() => handleRemoveSurveyQuestion(q.id, q.question, idx)}
                             className="p-1 rounded bg-zinc-950 hover:bg-red-950/40 border border-zinc-850 hover:border-red-900/60 text-zinc-500 hover:text-red-400 transition-colors"
+                            title="Quitar pregunta"
                           >
-                            <Trash2 size={10} />
+                            <Trash2 size={11} />
                           </button>
                         )}
                       </div>
 
                       <div>
+                        <label className="block text-[8px] font-bold text-zinc-500 uppercase tracking-wider mb-1">
+                          Texto de la Pregunta:
+                        </label>
                         <input
                           type="text"
                           required
@@ -3841,11 +3869,14 @@ export const AdminDashboard: React.FC = () => {
                             setSurveyQuestions(copy);
                           }}
                           placeholder={`Ej. ¿Cómo calificarías la excursión #${idx + 1}?`}
-                          className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-[10px] font-semibold focus:outline-none"
+                          className="w-full px-3.5 py-2.5 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-primary/50 text-white text-xs font-semibold focus:outline-none"
                         />
                       </div>
 
                       <div>
+                        <label className="block text-[8px] font-bold text-zinc-500 uppercase tracking-wider mb-1">
+                          Tipo de Respuesta:
+                        </label>
                         <select
                           value={q.answer_type}
                           onChange={(e) => {
@@ -3853,16 +3884,43 @@ export const AdminDashboard: React.FC = () => {
                             copy[idx].answer_type = e.target.value;
                             setSurveyQuestions(copy);
                           }}
-                          className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px] font-bold focus:outline-none focus:border-primary"
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-bold focus:outline-none focus:border-primary"
                         >
-                          <option value="text">Texto Libre (Comentarios y sugerencias)</option>
-                          <option value="number">Numérica del 1 al 10 (Calificaciones)</option>
-                          <option value="boolean">Verdadero o Falso (Conformidad Sí/No)</option>
+                          <option value="text">Texto Libre (Comentarios y sugerencias abiertas)</option>
+                          <option value="number">Numérica del 1 al 10 (Botones de puntuación)</option>
+                          <option value="boolean">Verdadero o Falso (Botones de conformidad Sí/No)</option>
                         </select>
                       </div>
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Selector de Estado Activa/Borrador */}
+              <div className="pt-2 border-t border-zinc-900">
+                <label className="flex items-center gap-3 p-3.5 rounded-xl bg-zinc-900/80 border border-zinc-800 cursor-pointer select-none hover:border-zinc-700 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={surveyActive}
+                    onChange={(e) => setSurveyActive(e.target.checked)}
+                    className="w-4 h-4 rounded accent-primary cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-white uppercase tracking-wider">
+                        Activar Encuesta para Pasajeros
+                      </span>
+                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${surveyActive ? 'bg-emerald-950 border border-emerald-800 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                        {surveyActive ? 'Activa en la Galería' : 'Borrador / Inactiva'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-zinc-400 font-medium mt-0.5">
+                      {surveyActive 
+                        ? 'La encuesta aparecerá inmediatamente activa en la galería de los egresados con el botón "Responder Encuesta".' 
+                        : 'La encuesta quedará guardada como borrador en la consola y no será visible para los egresados.'}
+                    </p>
+                  </div>
+                </label>
               </div>
 
               {/* Botones de acción modal */}
@@ -3878,7 +3936,7 @@ export const AdminDashboard: React.FC = () => {
                   type="submit"
                   className="px-6 py-3 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-wider transition-colors glow-yellow"
                 >
-                  {editingSurvey ? 'Guardar Cambios' : 'Crear Encuesta'}
+                  {editingSurvey ? 'Guardar Cambios' : 'Crear y Publicar Encuesta'}
                 </button>
               </div>
             </form>
