@@ -158,54 +158,6 @@ export const AdminDashboard: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Mock data to ensure working site out of the box
-  const mockSchools: School[] = [
-    {
-      id: 'mock-school-1',
-      group_code: '0001',
-      name: 'EGB Colegio San Martín, Instituto Belgrano',
-      school_names: ['EGB Colegio San Martín', 'Instituto Belgrano'],
-      destination: 'Villa Carlos Paz',
-      travel_date: '2026-11-10',
-      group_photo_web: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/carlospaz-sanmartin.zip',
-    },
-    {
-      id: 'mock-school-2',
-      group_code: '0002',
-      name: 'Primaria Instituto Don Bosco',
-      school_names: ['Primaria Instituto Don Bosco'],
-      destination: 'Villa Carlos Paz',
-      travel_date: '2026-11-22',
-      group_photo_web: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/carlospaz-donbosco.zip',
-    },
-    {
-      id: 'mock-school-3',
-      group_code: '0003',
-      name: 'Primaria Instituto Dardo Rocha, Escuela Nº 5',
-      school_names: ['Primaria Instituto Dardo Rocha', 'Escuela Nº 5'],
-      destination: 'Mar del Plata',
-      travel_date: '2026-10-12',
-      group_photo_web: 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/mdp-dardorocha.zip',
-    },
-    {
-      id: 'mock-school-4',
-      group_code: '0004',
-      name: 'Colegio Stella Maris',
-      school_names: ['Colegio Stella Maris'],
-      destination: 'Mar del Plata',
-      travel_date: '2026-10-25',
-      group_photo_web: 'https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?w=800&auto=format&fit=crop&q=80',
-      group_photo_hd: 'https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?w=1600&auto=format&fit=crop&q=80',
-      multimedia_url: 'https://demo.backblaze.com/download/mdp-stellamaris.zip',
-    }
-  ];
-
   // Check auth session & admin privileges
   useEffect(() => {
     const checkUser = async () => {
@@ -245,11 +197,11 @@ export const AdminDashboard: React.FC = () => {
       if (data && data.length > 0) {
         setSchools((data as School[]).map(normalizeSchoolWithCdn));
       } else {
-        setSchools(mockSchools);
+        setSchools([]);
       }
     } catch (err) {
-      console.warn('Database error when loading admin schools, loading offline mock database.');
-      setSchools(mockSchools);
+      console.warn('Database error when loading admin schools:', err);
+      setSchools([]);
     } finally {
       setLoading(false);
     }
@@ -1126,7 +1078,7 @@ export const AdminDashboard: React.FC = () => {
     const optionText = 'Simulado';
 
     // Registrar evento de analíticas
-    const matchedSchool = schools[0] || { id: 'mock-school-1', destination: 'Villa Carlos Paz' };
+    const matchedSchool = schools[0] || { id: 'general', destination: 'General' };
     getAnalyticsEvents().then(events => {
       const timestamp = new Date().toISOString();
       const localEvent = {
@@ -1493,7 +1445,7 @@ export const AdminDashboard: React.FC = () => {
       setGalleryPhotos(prev => prev.filter(p => p.id !== photoId));
       setSuccessMsg('Foto eliminada de la galería con éxito.');
     } catch (err) {
-      console.warn('DB delete photo failed, removing local mockup photo.');
+      console.warn('DB delete photo failed, removing photo from state.');
       setGalleryPhotos(prev => prev.filter(p => p.id !== photoId));
       setSuccessMsg('Foto removida del estado local.');
     }
@@ -2600,6 +2552,12 @@ export const AdminDashboard: React.FC = () => {
                           <tr>
                             <td colSpan={5} className="text-center py-20 text-xs text-zinc-500 font-bold uppercase tracking-wider animate-pulse">
                               Cargando la base de datos de grupos y colegios...
+                            </td>
+                          </tr>
+                        ) : schools.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="text-center py-20 text-zinc-500 text-xs font-bold uppercase tracking-wider">
+                              Aún no hay grupos o colegios registrados. Hacé clic en '+ Registrar Colegio' para comenzar.
                             </td>
                           </tr>
                         ) : currentSchools.length === 0 ? (
