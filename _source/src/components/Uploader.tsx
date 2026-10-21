@@ -19,10 +19,11 @@ interface FileQueueItem {
 interface UploaderProps {
   schoolId: string;
   subSchool?: string;
+  defaultCategory?: 'Excursiones' | 'Fiestas' | 'Actividades' | 'Grupal';
   onUploadComplete: () => void;
 }
 
-export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, onUploadComplete }) => {
+export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, defaultCategory = 'Actividades', onUploadComplete }) => {
   const [queue, setQueue] = useState<FileQueueItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,7 +41,7 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, onUploa
         size: file.size,
         progress: 0,
         status: 'esperando',
-        category: 'Grupal',
+        category: defaultCategory || 'Actividades',
         previewUrl: URL.createObjectURL(file),
       };
     });

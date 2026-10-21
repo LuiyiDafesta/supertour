@@ -70,11 +70,26 @@ export const normalizeSchoolWithCdn = <T extends {
 }>(school: T): T => {
   if (!school) return school;
 
+  let normalizedMultimediaUrl = school.multimedia_url;
+  if (normalizedMultimediaUrl && typeof normalizedMultimediaUrl === 'string') {
+    const trimmed = normalizedMultimediaUrl.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          normalizedMultimediaUrl = JSON.stringify(parsed.map(v => ({ ...v, url: toCdnUrl(v.url) })));
+        }
+      } catch {}
+    } else {
+      normalizedMultimediaUrl = toCdnUrl(trimmed);
+    }
+  }
+
   return {
     ...school,
     group_photo_web: school.group_photo_web ? toCdnUrl(school.group_photo_web) : school.group_photo_web,
     group_photo_hd: school.group_photo_hd ? toCdnUrl(school.group_photo_hd) : school.group_photo_hd,
-    multimedia_url: school.multimedia_url ? toCdnUrl(school.multimedia_url) : school.multimedia_url,
+    multimedia_url: normalizedMultimediaUrl,
     videos: Array.isArray(school.videos)
       ? school.videos.map((v) => ({
           ...v,
@@ -109,12 +124,13 @@ export const normalizeGalleryPhotoWithCdn = <T extends {
 };
 
 /**
- * Obtiene la lista completa de videos del grupo (videos JSONB o multimedia_url legacy),
+ * Obtiene la lista completa de videos del grupo (videos JSONB o multimedia_url legacy/JSON),
  * normalizando cada enlace a través del CDN Cloudflare.
  */
-export const getSchoolVideos = (school?: { videos?: any[]; multimedia_url?: string; created_at?: string } | null): { id: string; title: string; url: string; created_at?: string }[] => {
+export const getSchoolVideos = (school?: { videos?: any[]; multimedia_url?: string; created_at?: string; school_items?: any[] } | null): { id: string; title: string; url: string; created_at?: string }[] => {
   if (!school) return [];
 
+  // 1. Array de videos nativo (columna JSONB)
   if (Array.isArray(school.videos) && school.videos.length > 0) {
     return school.videos.map((v, i) => ({
       id: v.id || `video-${i}`,
@@ -124,7 +140,8 @@ export const getSchoolVideos = (school?: { videos?: any[]; multimedia_url?: stri
     }));
   }
 
-  if (school.multimedia_url && school.multimedia_url.trim() !== '') {
+  // 2. Columna multimedia_url (soporta array serializado en JSON o URL directa)
+  if (school.multimedia_url && typeof school.multimedia_url === 'string' && school.multimedia_url.trim() !== '') {
     const trimmed = school.multimedia_url.trim();
     if (trimmed.startsWith('[')) {
       try {
@@ -138,17 +155,54 @@ export const getSchoolVideos = (school?: { videos?: any[]; multimedia_url?: stri
           }));
         }
       } catch {
-        // Fallback abajo
+        // Fallback abajo si falla parseo JSON
       }
     }
     if (trimmed !== 'https://demo.backblaze.com/download/viaje.zip') {
+      const fileName = trimmed.split('/').pop()?.split('?')[0] || '';
+      const cleanTitle = fileName.replace(/^\d+[-_]/, '').replace(/\.[^/.]+$/, '').replace(/[_+]/g, ' ');
       return [{
         id: 'primary-video',
-        title: 'Video Oficial del Viaje',
+        title: cleanTitle ? cleanTitle : 'Video Oficial del Viaje',
         url: toCdnUrl(trimmed),
         created_at: school.created_at,
       }];
     }
+  }
+
+  // 3. Fallback: Inspeccionar school_items por si se asignó multimedia_url en algún sub-colegio
+  if (Array.isArray(school.school_items) && school.school_items.length > 0) {
+    const itemVideos: { id: string; title: string; url: string; created_at?: string }[] = [];
+    school.school_items.forEach((item, idx) => {
+      if (item.multimedia_url && typeof item.multimedia_url === 'string' && item.multimedia_url.trim() !== '') {
+        const itemTrimmed = item.multimedia_url.trim();
+        if (itemTrimmed.startsWith('[')) {
+          try {
+            const parsed = JSON.parse(itemTrimmed);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((v: any, vi: number) => {
+                itemVideos.push({
+                  id: v.id || `sub-vid-${idx}-${vi}`,
+                  title: v.title || `${item.name || 'Colegio'} - Video #${vi + 1}`,
+                  url: toCdnUrl(v.url),
+                  created_at: school.created_at
+                });
+              });
+              return;
+            }
+          } catch {}
+        }
+        if (itemTrimmed !== 'https://demo.backblaze.com/download/viaje.zip') {
+          itemVideos.push({
+            id: `sub-vid-${idx}`,
+            title: `Video - ${item.name || 'Grupo'}`,
+            url: toCdnUrl(itemTrimmed),
+            created_at: school.created_at
+          });
+        }
+      }
+    });
+    if (itemVideos.length > 0) return itemVideos;
   }
 
   return [];

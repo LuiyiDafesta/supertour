@@ -51,11 +51,20 @@ export const SchoolDetailPage: React.FC = () => {
   const [previewPhotoModal, setPreviewPhotoModal] = useState<GalleryPhoto | null>(null);
   const [previewVideoModal, setPreviewVideoModal] = useState<{ title: string; url: string } | null>(null);
 
-  // Group Photos: all photos with category 'Grupal'
-  const groupPhotos = photos.filter(p => p.category === 'Grupal');
+  // Distinction between group photos and trip/gallery photos:
+  // 1. Group photos: uploaded to 'group-photos/' OR explicitly categorized as 'Grupal' (and NOT in 'schools-gallery/')
+  const isGroupPhoto = (p: GalleryPhoto) => {
+    const web = p.url_web || '';
+    const hd = p.url_hd || '';
+    if (web.includes('/group-photos/') || hd.includes('/group-photos/')) return true;
+    if (web.includes('/schools-gallery/') || hd.includes('/schools-gallery/')) return false;
+    return p.category === 'Grupal';
+  };
+
+  const groupPhotos = photos.filter(isGroupPhoto);
   const finalGroupPhotos = groupPhotos.length > 0 
     ? groupPhotos 
-    : (school?.group_photo_web && school.group_photo_web.trim() !== ''
+    : (school?.group_photo_web && school.group_photo_web.trim() !== '' && !school.group_photo_web.includes('unsplash.com')
         ? [{
             id: 'primary-cover',
             school_id: school.id,
@@ -71,7 +80,7 @@ export const SchoolDetailPage: React.FC = () => {
     : 0;
   const activeGroupPhoto = finalGroupPhotos.length > 0 ? finalGroupPhotos[safeGroupPhotoIdx] : null;
   const groupVideos = getSchoolVideos(school);
-  const tripPhotos = photos.filter(p => p.category !== 'Grupal');
+  const tripPhotos = photos.filter(p => !isGroupPhoto(p));
 
   const bannerUrl = school 
     ? `https://fotos.dreamscda.com.ar/?source=supertourchannel.com.ar&utm_source=supertourchannel.com.ar&utm_medium=banner&colegio=${encodeURIComponent(school.name)}` 
@@ -708,25 +717,25 @@ export const SchoolDetailPage: React.FC = () => {
         {/* ============================================================== */}
         {/* SECCIÓN 2: GALERÍA DE VIDEOS (DEBAJO DE FOTOS GRUPALES)        */}
         {/* ============================================================== */}
-        {groupVideos.length > 0 && (
-          <section id="seccion-videos" className="mb-16 select-none animate-fade-in">
-            <div className="text-center md:text-left mb-6">
-              <span className="text-xs font-bold text-primary tracking-[0.25em] uppercase glow-text-yellow">
-                Recuerdos Audiovisuales
-              </span>
-              <h2 className="text-xl sm:text-2xl font-black text-white mt-1 uppercase tracking-tight flex items-center justify-center md:justify-start gap-2">
-                <Film size={20} className="text-primary animate-pulse" />
-                Videos del Viaje ({groupVideos.length})
-              </h2>
-              <p className="text-zinc-500 text-xs sm:text-sm mt-1">
-                Mirá y descargá las filmaciones y material multimedia exclusivo de tu grupo de egresados.
-              </p>
-            </div>
+        <section id="seccion-videos" className="mb-16 select-none animate-fade-in">
+          <div className="text-center md:text-left mb-6">
+            <span className="text-xs font-bold text-primary tracking-[0.25em] uppercase glow-text-yellow">
+              Recuerdos Audiovisuales
+            </span>
+            <h2 className="text-xl sm:text-2xl font-black text-white mt-1 uppercase tracking-tight flex items-center justify-center md:justify-start gap-2">
+              <Film size={20} className="text-primary animate-pulse" />
+              {groupVideos.length > 0 ? `Videos del Viaje (${groupVideos.length})` : 'Video del Viaje'}
+            </h2>
+            <p className="text-zinc-500 text-xs sm:text-sm mt-1">
+              Mirá y descargá las filmaciones y material multimedia exclusivo de tu grupo de egresados.
+            </p>
+          </div>
 
+          {groupVideos.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {groupVideos.map((vid, vIdx) => {
                 const isZip = vid.url.toLowerCase().endsWith('.zip');
-                const isVideoFile = vid.url.toLowerCase().match(/\.(mp4|webm|mov|m4v)(\?.*)?$/i);
+                const isVideoFile = !isZip;
 
                 return (
                   <div
@@ -791,8 +800,20 @@ export const SchoolDetailPage: React.FC = () => {
                 );
               })}
             </div>
-          </section>
-        )}
+          ) : (
+            <div className="glass-card rounded-3xl p-8 sm:p-12 border border-zinc-800/40 text-center shadow-premium bg-zinc-950/60">
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4 glow-yellow">
+                <Film size={28} className="text-primary" />
+              </div>
+              <h3 className="text-base sm:text-lg font-black uppercase text-white tracking-tight">
+                Video del Viaje en Preparación
+              </h3>
+              <p className="text-zinc-400 text-xs mt-2 max-w-md mx-auto leading-relaxed">
+                El material audiovisual de este grupo está siendo procesado por los coordinadores de SuperTour. Estará disponible aquí muy pronto.
+              </p>
+            </div>
+          )}
+        </section>
 
         {/* Survey Segment */}
         {activeSurvey && (
@@ -878,22 +899,24 @@ export const SchoolDetailPage: React.FC = () => {
           </div>
         )}
 
-        {/* Gallery Segment */}
-        <section>
-          <div className="text-center md:text-left mb-2">
+        {/* ============================================================== */}
+        {/* SECCIÓN 3: GALERÍA DE FOTOS DEL VIAJE (FOTOS DE ACTIVIDADES)   */}
+        {/* ============================================================== */}
+        <section className="mb-16 select-none">
+          <div className="text-center md:text-left mb-6">
             <span className="text-xs font-bold text-primary tracking-[0.25em] uppercase glow-text-yellow">
               Galería Flexible
             </span>
             <h2 className="text-xl sm:text-2xl font-black text-white mt-1 uppercase tracking-tight flex items-center justify-center md:justify-start gap-2">
               <ImageIcon size={20} className="text-primary" />
-              Recuerdos del Viaje
+              Galería Completa de Fotos ({tripPhotos.length})
             </h2>
             <p className="text-zinc-500 text-xs sm:text-sm mt-1">
-              Ordená, filtrá y hacé clic en las fotos para visualizarlas en alta resolución y compartirlas.
+              Fotos exclusivas de las excursiones, fiestas y actividades compartidas por todos los chicos.
             </p>
           </div>
 
-          <PremiumGallery photos={tripPhotos.length > 0 ? tripPhotos : photos} schoolName={school.name} />
+          <PremiumGallery photos={tripPhotos} schoolName={school.name} />
         </section>
 
         {/* MODAL DE ZOOM / VISTA COMPLETA DE FOTO GRUPAL */}

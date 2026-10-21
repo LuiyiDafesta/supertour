@@ -756,7 +756,8 @@ export const AdminDashboard: React.FC = () => {
     );
 
     if (isCover) {
-      const remainingGroupPhotos = galleryPhotos.filter(p => p.category === 'Grupal' && p.id !== photo.id);
+      const isGroup = (p: GalleryPhoto) => (p.url_web?.includes('/group-photos/') || p.url_hd?.includes('/group-photos/') || (p.category === 'Grupal' && !p.url_web?.includes('/schools-gallery/')));
+      const remainingGroupPhotos = galleryPhotos.filter(p => isGroup(p) && p.id !== photo.id);
       const nextCover = remainingGroupPhotos[0];
       const newWeb = nextCover ? toCdnUrl(nextCover.url_web) : '';
       const newHd = nextCover ? toCdnUrl(nextCover.url_hd) : '';
@@ -827,18 +828,32 @@ export const AdminDashboard: React.FC = () => {
     if (uploadedVideos.length > 0) {
       const currentVideos = getSchoolVideos(viewingGallerySchool);
       const updatedVideos = [...currentVideos, ...uploadedVideos];
+      const videosJson = JSON.stringify(updatedVideos);
 
       try {
-        await supabase.from('schools').update({
+        const { error: err1 } = await supabase.from('schools').update({
           videos: updatedVideos,
-          multimedia_url: updatedVideos[0]?.url || ''
+          multimedia_url: videosJson
         }).eq('id', viewingGallerySchool.id);
+
+        if (err1) {
+          await supabase.from('schools').update({
+            multimedia_url: videosJson
+          }).eq('id', viewingGallerySchool.id);
+        }
       } catch (dbErr) {
         console.warn('DB update video error, falling back locally:', dbErr);
+        try {
+          await supabase.from('schools').update({
+            multimedia_url: videosJson
+          }).eq('id', viewingGallerySchool.id);
+        } catch (e) {
+          console.warn('Fallback error:', e);
+        }
       }
 
-      setViewingGallerySchool(prev => prev ? { ...prev, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : null);
-      setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : s));
+      setViewingGallerySchool(prev => prev ? { ...prev, videos: updatedVideos, multimedia_url: videosJson } : null);
+      setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, videos: updatedVideos, multimedia_url: videosJson } : s));
     }
 
     if (failedList.length > 0) {
@@ -898,19 +913,33 @@ export const AdminDashboard: React.FC = () => {
     };
     const updatedVideos = [...currentVideos, newVid];
 
+    const videosJson = JSON.stringify(updatedVideos);
     try {
-      await supabase.from('schools').update({
+      const { error: err1 } = await supabase.from('schools').update({
         videos: updatedVideos,
-        multimedia_url: updatedVideos[0]?.url || ''
+        multimedia_url: videosJson
       }).eq('id', viewingGallerySchool.id);
+
+      if (err1) {
+        await supabase.from('schools').update({
+          multimedia_url: videosJson
+        }).eq('id', viewingGallerySchool.id);
+      }
       toast.success('Video enlazado con éxito al grupo.');
     } catch (err) {
-      console.warn('Error saving video URL in DB:', err);
-      toast.success('[Modo Offline] Video guardado localmente.');
+      try {
+        await supabase.from('schools').update({
+          multimedia_url: videosJson
+        }).eq('id', viewingGallerySchool.id);
+        toast.success('Video enlazado con éxito al grupo.');
+      } catch (e) {
+        console.warn('Error saving video URL in DB:', e);
+        toast.success('[Modo Offline] Video guardado localmente.');
+      }
     }
 
-    setViewingGallerySchool(prev => prev ? { ...prev, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : null);
-    setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : s));
+    setViewingGallerySchool(prev => prev ? { ...prev, videos: updatedVideos, multimedia_url: videosJson } : null);
+    setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, videos: updatedVideos, multimedia_url: videosJson } : s));
     
     setNewVideoTitle('');
     setNewVideoUrl('');
@@ -927,20 +956,34 @@ export const AdminDashboard: React.FC = () => {
       deleteFromB2(videoToDelete.url);
     }
     const updatedVideos = currentVideos.filter(v => v.id !== videoId);
+    const videosJson = updatedVideos.length > 0 ? JSON.stringify(updatedVideos) : '';
 
     try {
-      await supabase.from('schools').update({
+      const { error: err1 } = await supabase.from('schools').update({
         videos: updatedVideos,
-        multimedia_url: updatedVideos[0]?.url || ''
+        multimedia_url: videosJson
       }).eq('id', viewingGallerySchool.id);
+
+      if (err1) {
+        await supabase.from('schools').update({
+          multimedia_url: videosJson
+        }).eq('id', viewingGallerySchool.id);
+      }
       toast.success('Video eliminado del grupo.');
     } catch (err) {
-      console.warn('Error deleting video in DB:', err);
-      toast.success('Video removido localmente.');
+      try {
+        await supabase.from('schools').update({
+          multimedia_url: videosJson
+        }).eq('id', viewingGallerySchool.id);
+        toast.success('Video eliminado del grupo.');
+      } catch (e) {
+        console.warn('Error deleting video in DB:', e);
+        toast.success('Video removido localmente.');
+      }
     }
 
-    setViewingGallerySchool(prev => prev ? { ...prev, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : null);
-    setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, videos: updatedVideos, multimedia_url: updatedVideos[0]?.url || '' } : s));
+    setViewingGallerySchool(prev => prev ? { ...prev, videos: updatedVideos, multimedia_url: videosJson } : null);
+    setSchools(prev => prev.map(s => s.id === viewingGallerySchool.id ? { ...s, videos: updatedVideos, multimedia_url: videosJson } : s));
   };
 
   // Manejador para crear o editar una encuesta (Supabase con fallback local)
@@ -1881,7 +1924,15 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             {(() => {
-              const allGroupPhotos = galleryPhotos.filter(p => p.category === 'Grupal');
+              const isGroupPhoto = (p: GalleryPhoto) => {
+                const web = p.url_web || '';
+                const hd = p.url_hd || '';
+                if (web.includes('/group-photos/') || hd.includes('/group-photos/')) return true;
+                if (web.includes('/schools-gallery/') || hd.includes('/schools-gallery/')) return false;
+                return p.category === 'Grupal';
+              };
+
+              const allGroupPhotos = galleryPhotos.filter(isGroupPhoto);
               const groupPhotos = allGroupPhotos.length > 0 
                 ? allGroupPhotos 
                 : (viewingGallerySchool.group_photo_web && !viewingGallerySchool.group_photo_web.includes('unsplash.com') 
@@ -1896,7 +1947,7 @@ export const AdminDashboard: React.FC = () => {
                     : []);
 
               const groupVideos = getSchoolVideos(viewingGallerySchool);
-              const tripPhotos = galleryPhotos.filter(p => p.category !== 'Grupal');
+              const tripPhotos = galleryPhotos.filter(p => !isGroupPhoto(p));
 
               return (
                 <div className="space-y-10">
@@ -2390,6 +2441,7 @@ export const AdminDashboard: React.FC = () => {
                     <div>
                       <Uploader
                         schoolId={viewingGallerySchool.id}
+                        defaultCategory="Actividades"
                         onUploadComplete={() => loadSchoolPhotos(viewingGallerySchool.id)}
                       />
                     </div>
