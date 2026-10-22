@@ -63,13 +63,13 @@ export const LandingPage: React.FC = () => {
           {/* Brand Presentation Text */}
           <div className="space-y-6">
             <h3 className="text-xl sm:text-2xl font-black uppercase text-white tracking-tight leading-tight">
-              La marca homogénea del viaje de egresados de primaria
+              Los mejores recuerdos de tu viaje
             </h3>
             <p className="text-zinc-400 text-sm leading-relaxed font-medium">
               En <strong className="text-white font-black">SuperTourChannel</strong> formamos parte de un ecosistema líder y consolidado en turismo estudiantil junto a empresas referentes como <strong className="text-primary font-black">TravelRock</strong> y <strong className="text-primary font-black">DreamsCDA</strong>. Compartimos la misma pasión, infraestructura y nivel de excelencia para que el viaje de los chicos sea seguro, emocionante e inolvidable.
             </p>
             <p className="text-zinc-400 text-sm leading-relaxed font-medium">
-              A través de nuestra plataforma premium, las familias pueden acompañar a los egresados reviviendo, descargando y compartiendo las galerías de fotos grupales e individuales tomadas por nuestros coordinadores en Mar del Plata y Villa Carlos Paz.
+              A través de nuestra plataforma premium, las familias pueden acompañar a los egresados reviviendo, descargando y compartiendo las galerías de fotos grupales e individuales tomadas en Mar del Plata y Villa Carlos Paz.
             </p>
             
             {/* Trust Badges */}

@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { GalleryPhoto } from '../types/database';
-import { downloadFileDirectly } from '../lib/downloader';
+import { 
+  downloadFileDirectly, 
+  downloadPhotosAsZip, 
+  downloadPhotosSequentially 
+} from '../lib/downloader';
 import { trackEvent } from '../lib/analytics';
 import { toCdnUrl } from '../lib/cdn';
 import { toast } from 'sonner';
@@ -22,7 +26,9 @@ import {
   Sparkles,
   CheckSquare,
   Square,
-  Loader2
+  Loader2,
+  FolderArchive,
+  Layers
 } from 'lucide-react';
 
 interface PremiumGalleryProps {
@@ -48,7 +54,15 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
   const [selectionMode, setSelectionMode] = useState<boolean>(false);
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
-  const [downloadProgress, setDownloadProgress] = useState<{ current: number; total: number } | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<{ 
+    current: number; 
+    total: number; 
+    percent: number; 
+    label: string; 
+    isZip: boolean; 
+  } | null>(null);
+  const [downloadModalOpen, setDownloadModalOpen] = useState<boolean>(false);
+  const [targetBatchPhotos, setTargetBatchPhotos] = useState<GalleryPhoto[]>([]);
   const cancelDownloadRef = useRef<boolean>(false);
 
   // Reset page and selection when photo array changes
@@ -158,56 +172,144 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
     setSelectedPhotoIds(new Set());
   };
 
-  // Sequential batch download engine
-  const handleDownloadMultiple = async (targetPhotos: GalleryPhoto[], batchTitle: string) => {
+  // Open batch options modal or trigger direct single download
+  const handleOpenDownloadOptions = (targetPhotos: GalleryPhoto[]) => {
     if (targetPhotos.length === 0) return;
+    if (targetPhotos.length === 1) {
+      const p = targetPhotos[0];
+      downloadFileDirectly(p.url_hd || p.url_web, `SuperTour-${schoolName}-Foto.jpg`);
+      toast.success('Iniciando descarga de la foto...');
+      return;
+    }
+    setTargetBatchPhotos(targetPhotos);
+    setDownloadModalOpen(true);
+  };
+
+  // ZIP batch download engine (Zero browser blocker, single reliable file)
+  const startZipDownload = async (targetPhotos: GalleryPhoto[]) => {
+    if (targetPhotos.length === 0) return;
+    setDownloadModalOpen(false);
     setIsDownloading(true);
     cancelDownloadRef.current = false;
-    setDownloadProgress({ current: 0, total: targetPhotos.length });
 
-    toast.info(`Iniciando descarga secuencial de ${targetPhotos.length} fotos...`);
+    setDownloadProgress({
+      current: 0,
+      total: targetPhotos.length,
+      percent: 0,
+      label: 'Preparando descarga...',
+      isZip: true
+    });
 
-    let count = 0;
-    for (let i = 0; i < targetPhotos.length; i++) {
-      if (cancelDownloadRef.current) {
-        toast.warning('Descarga en lote cancelada.');
-        break;
-      }
-      const photo = targetPhotos[i];
-      const filename = `SuperTour-${schoolName}-${i + 1}.jpg`;
-      const url = photo.url_hd || photo.url_web;
+    toast.info(`Preparando archivo ZIP con ${targetPhotos.length} fotos...`);
 
-      try {
-        await downloadFileDirectly(url, filename);
-        count++;
-        setDownloadProgress({ current: count, total: targetPhotos.length });
+    const items = targetPhotos.map((p, idx) => ({
+      url: p.url_hd || p.url_web,
+      filename: `SuperTour-${schoolName}-${idx + 1}.jpg`
+    }));
+
+    const sanitizedSchool = schoolName.replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const zipName = `SuperTour-${sanitizedSchool}-Fotos.zip`;
+
+    try {
+      const result = await downloadPhotosAsZip(
+        items,
+        zipName,
+        (info) => {
+          setDownloadProgress({
+            current: info.current,
+            total: info.total,
+            percent: info.percent,
+            label: info.stage === 'fetching'
+              ? `Descargando foto ${info.current} de ${info.total}...`
+              : 'Empaquetando archivo ZIP...',
+            isZip: true
+          });
+        },
+        () => cancelDownloadRef.current
+      );
+
+      if (result.success && !cancelDownloadRef.current) {
+        toast.success(`¡Descarga lista! Se guardó el archivo ${zipName} con ${result.count} fotos.`);
         trackEvent({
           event_type: 'photo_download',
-          school_id: photo.school_id,
+          school_id: targetPhotos[0]?.school_id,
           destination: destination || undefined,
-          metadata: { photo_id: photo.id, batch: batchTitle }
+          metadata: { count: result.count, type: 'zip' }
         });
-      } catch (err) {
-        console.error(`Error al descargar foto ${i + 1}:`, err);
+      } else if (cancelDownloadRef.current) {
+        toast.warning('Descarga de archivo ZIP cancelada.');
       }
-
-      // Small delay between downloads so the browser creates files without pop-up blocking
-      if (i < targetPhotos.length - 1) {
-        await new Promise(r => setTimeout(r, 350));
+    } catch (err) {
+      if (!cancelDownloadRef.current) {
+        console.error('Error al generar ZIP:', err);
+        toast.error('Ocurrió un error al preparar el archivo ZIP.');
       }
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(null);
     }
+  };
 
-    if (!cancelDownloadRef.current) {
-      toast.success(`¡Descarga finalizada! Se guardaron ${count} fotos.`);
+  // Sequential 1-by-1 download engine (controlled queue)
+  const startSequentialDownload = async (targetPhotos: GalleryPhoto[]) => {
+    if (targetPhotos.length === 0) return;
+    setDownloadModalOpen(false);
+    setIsDownloading(true);
+    cancelDownloadRef.current = false;
+
+    setDownloadProgress({
+      current: 0,
+      total: targetPhotos.length,
+      percent: 0,
+      label: 'Iniciando descargas en cola...',
+      isZip: false
+    });
+
+    toast.info('Descargando fotos 1 por 1. Si tu navegador lo solicita, hacé clic en "Permitir descargas múltiples".');
+
+    const items = targetPhotos.map((p, idx) => ({
+      url: p.url_hd || p.url_web,
+      filename: `SuperTour-${schoolName}-${idx + 1}.jpg`
+    }));
+
+    try {
+      const result = await downloadPhotosSequentially(
+        items,
+        900,
+        (current, total) => {
+          setDownloadProgress({
+            current,
+            total,
+            percent: Math.round((current / total) * 100),
+            label: `Descargando foto ${current} de ${total}...`,
+            isZip: false
+          });
+          trackEvent({
+            event_type: 'photo_download',
+            school_id: targetPhotos[current - 1]?.school_id,
+            destination: destination || undefined,
+            metadata: { photo_id: targetPhotos[current - 1]?.id, batch: 'sequential' }
+          });
+        },
+        () => cancelDownloadRef.current
+      );
+
+      if (result.success && !cancelDownloadRef.current) {
+        toast.success(`¡Descarga finalizada! Se guardaron ${result.count} fotos.`);
+      } else if (cancelDownloadRef.current) {
+        toast.warning('Descarga en cola cancelada.');
+      }
+    } catch (err) {
+      console.error('Error en descarga secuencial:', err);
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(null);
     }
-
-    setIsDownloading(false);
-    setDownloadProgress(null);
   };
 
   const handleDownloadSelected = () => {
     const selected = photos.filter(p => selectedPhotoIds.has(p.id));
-    handleDownloadMultiple(selected, 'seleccionadas');
+    handleOpenDownloadOptions(selected);
   };
 
   // Return tailwind grid column classes based on count
@@ -232,7 +334,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
           <button
             type="button"
             disabled={isDownloading || totalPhotos === 0}
-            onClick={() => handleDownloadMultiple(photos, `todas-${totalPhotos}`)}
+            onClick={() => handleOpenDownloadOptions(photos)}
             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-800 hover:border-zinc-700 font-black text-xs uppercase tracking-wider transition-all disabled:opacity-50"
             title="Descargar todas las fotos del viaje (no sólo las de esta página)"
           >
@@ -532,18 +634,27 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
       {downloadProgress && (
         <div className="fixed bottom-6 right-6 z-[120] bg-zinc-950/95 border border-primary/40 p-4 rounded-2xl shadow-2xl backdrop-blur-md max-w-xs w-full animate-fade-in select-none">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-black uppercase text-white flex items-center gap-2">
-              <Download size={14} className="text-primary animate-bounce" />
-              Descargando fotos
+            <span className="text-xs font-black uppercase text-white flex items-center gap-2 truncate">
+              {downloadProgress.isZip ? (
+                <FolderArchive size={14} className="text-primary animate-pulse flex-shrink-0" />
+              ) : (
+                <Download size={14} className="text-primary animate-bounce flex-shrink-0" />
+              )}
+              <span className="truncate">
+                {downloadProgress.isZip ? 'Preparando ZIP' : 'Descargando'}
+              </span>
             </span>
-            <span className="text-xs font-mono font-bold text-primary">
+            <span className="text-xs font-mono font-bold text-primary flex-shrink-0">
               {downloadProgress.current} / {downloadProgress.total}
             </span>
           </div>
+          <p className="text-[11px] text-zinc-400 mb-2 truncate">
+            {downloadProgress.label}
+          </p>
           <div className="w-full h-2 rounded-full bg-zinc-900 overflow-hidden mb-3">
             <div 
               className="h-full bg-primary transition-all duration-300"
-              style={{ width: `${Math.round((downloadProgress.current / downloadProgress.total) * 100)}%` }}
+              style={{ width: `${Math.max(5, downloadProgress.percent)}%` }}
             />
           </div>
           <button
@@ -554,6 +665,110 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
             Detener Descarga
           </button>
         </div>
+      )}
+
+      {/* MODAL DE OPCIONES DE DESCARGA EN PORTAL */}
+      {downloadModalOpen && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in select-none"
+          onClick={() => setDownloadModalOpen(false)}
+        >
+          <div
+            className="relative max-w-lg w-full bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 shadow-2xl flex flex-col space-y-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest mb-2">
+                  <Sparkles size={11} /> Descarga Múltiple
+                </div>
+                <h3 className="text-lg sm:text-xl font-black text-white uppercase tracking-tight">
+                  Descargar {targetBatchPhotos.length} Fotos
+                </h3>
+                <p className="text-zinc-400 text-xs mt-1">
+                  {schoolName} • Elegí cómo preferís descargar tus recuerdos:
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDownloadModalOpen(false)}
+                className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Opciones */}
+            <div className="space-y-3.5">
+              {/* Opción 1: ZIP (Recomendado) */}
+              <div 
+                onClick={() => startZipDownload(targetBatchPhotos)}
+                className="group p-4 sm:p-5 rounded-2xl bg-zinc-900/60 hover:bg-zinc-900 border-2 border-primary/50 hover:border-primary transition-all duration-300 cursor-pointer shadow-lg relative overflow-hidden"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center flex-shrink-0 text-primary glow-yellow group-hover:scale-105 transition-transform">
+                    <FolderArchive size={24} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-black uppercase text-white tracking-tight">
+                        Archivo ZIP Completo
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-primary text-black font-black text-[9px] uppercase tracking-wider">
+                        Recomendado
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400 leading-relaxed font-medium">
+                      Un solo archivo <strong className="text-zinc-200">.zip</strong> con todas las {targetBatchPhotos.length} fotos en máxima resolución. Evita bloqueos del navegador y es compatible con celulares y PC.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="mt-4 w-full py-2.5 rounded-xl bg-primary hover:bg-primary/95 text-black font-black text-xs uppercase tracking-widest transition-all glow-yellow flex items-center justify-center gap-2"
+                >
+                  <Download size={14} />
+                  Descargar Paquete ZIP ({targetBatchPhotos.length} fotos)
+                </button>
+              </div>
+
+              {/* Opción 2: Fotos Individuales en Cola */}
+              <div
+                onClick={() => startSequentialDownload(targetBatchPhotos)}
+                className="group p-4 sm:p-5 rounded-2xl bg-zinc-900/30 hover:bg-zinc-900/70 border border-zinc-800 hover:border-zinc-700 transition-all duration-300 cursor-pointer"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-zinc-800/80 border border-zinc-700 flex items-center justify-center flex-shrink-0 text-zinc-300 group-hover:text-white transition-colors">
+                    <Layers size={22} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-black uppercase text-white tracking-tight">
+                        Fotos Individuales (En cola)
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400 leading-relaxed font-medium">
+                      Guarda cada foto como archivo .jpg separado en tu carpeta de descargas. Si tu navegador muestra un aviso de descargas múltiples, asegurate de hacer clic en <strong className="text-zinc-200">Permitir</strong>.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="mt-4 w-full py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                >
+                  <Download size={14} />
+                  Descargar Una por Una
+                </button>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-zinc-500 text-center">
+              Podés detener la descarga en cualquier momento desde el indicador inferior.
+            </p>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* FULL-SCREEN PREMIUM LIGHTBOX VIA PORTAL (ABOVE FIXED NAVBAR) */}
