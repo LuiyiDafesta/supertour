@@ -132,12 +132,14 @@ export const getSchoolVideos = (school?: { videos?: any[]; multimedia_url?: stri
 
   // 1. Array de videos nativo (columna JSONB)
   if (Array.isArray(school.videos) && school.videos.length > 0) {
-    return school.videos.map((v, i) => ({
-      id: v.id || `video-${i}`,
-      title: v.title || `Video #${i + 1}`,
-      url: toCdnUrl(v.url),
-      created_at: v.created_at || school.created_at,
-    }));
+    return school.videos
+      .filter((v: any) => v && v.url && typeof v.url === 'string' && !v.url.includes('demo.backblaze.com'))
+      .map((v, i) => ({
+        id: v.id || `video-${i}`,
+        title: v.title || `Video #${i + 1}`,
+        url: toCdnUrl(v.url),
+        created_at: v.created_at || school.created_at,
+      }));
   }
 
   // 2. Columna multimedia_url (soporta array serializado en JSON o URL directa)
@@ -147,18 +149,20 @@ export const getSchoolVideos = (school?: { videos?: any[]; multimedia_url?: stri
       try {
         const parsed = JSON.parse(trimmed);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((v: any, i: number) => ({
-            id: v.id || `video-${i}`,
-            title: v.title || `Video #${i + 1}`,
-            url: toCdnUrl(v.url),
-            created_at: v.created_at || school.created_at,
-          }));
+          return parsed
+            .filter((v: any) => v && v.url && typeof v.url === 'string' && !v.url.includes('demo.backblaze.com'))
+            .map((v: any, i: number) => ({
+              id: v.id || `video-${i}`,
+              title: v.title || `Video #${i + 1}`,
+              url: toCdnUrl(v.url),
+              created_at: v.created_at || school.created_at,
+            }));
         }
       } catch {
         // Fallback abajo si falla parseo JSON
       }
     }
-    if (trimmed !== 'https://demo.backblaze.com/download/viaje.zip') {
+    if (!trimmed.includes('demo.backblaze.com')) {
       const fileName = trimmed.split('/').pop()?.split('?')[0] || '';
       const cleanTitle = fileName.replace(/^\d+[-_]/, '').replace(/\.[^/.]+$/, '').replace(/[_+]/g, ' ');
       return [{
@@ -180,19 +184,21 @@ export const getSchoolVideos = (school?: { videos?: any[]; multimedia_url?: stri
           try {
             const parsed = JSON.parse(itemTrimmed);
             if (Array.isArray(parsed)) {
-              parsed.forEach((v: any, vi: number) => {
-                itemVideos.push({
-                  id: v.id || `sub-vid-${idx}-${vi}`,
-                  title: v.title || `${item.name || 'Colegio'} - Video #${vi + 1}`,
-                  url: toCdnUrl(v.url),
-                  created_at: school.created_at
+              parsed
+                .filter((v: any) => v && v.url && typeof v.url === 'string' && !v.url.includes('demo.backblaze.com'))
+                .forEach((v: any, vi: number) => {
+                  itemVideos.push({
+                    id: v.id || `sub-vid-${idx}-${vi}`,
+                    title: v.title || `${item.name || 'Colegio'} - Video #${vi + 1}`,
+                    url: toCdnUrl(v.url),
+                    created_at: school.created_at
+                  });
                 });
-              });
               return;
             }
           } catch {}
         }
-        if (itemTrimmed !== 'https://demo.backblaze.com/download/viaje.zip') {
+        if (!itemTrimmed.includes('demo.backblaze.com')) {
           itemVideos.push({
             id: `sub-vid-${idx}`,
             title: `Video - ${item.name || 'Grupo'}`,

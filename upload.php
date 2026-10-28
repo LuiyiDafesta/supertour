@@ -1,4 +1,10 @@
 <?php
+// Aumentar límites para permitir subida de videos y archivos grandes
+@ini_set('memory_limit', '1024M');
+@ini_set('max_execution_time', '900');
+@ini_set('post_max_size', '1024M');
+@ini_set('upload_max_filesize', '1024M');
+
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
@@ -22,9 +28,25 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+if (isset($_FILES['file']) && $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+    $errCode = $_FILES['file']['error'];
+    $errMsgs = [
+        UPLOAD_ERR_INI_SIZE => 'El archivo supera el tamaño máximo permitido por PHP (upload_max_filesize).',
+        UPLOAD_ERR_FORM_SIZE => 'El archivo supera el límite configurado en el formulario HTML.',
+        UPLOAD_ERR_PARTIAL => 'La subida del archivo se interrumpió y quedó incompleta.',
+        UPLOAD_ERR_NO_FILE => 'No se seleccionó ningún archivo.',
+        UPLOAD_ERR_NO_TMP_DIR => 'Falta la carpeta temporal de subida en el servidor.',
+        UPLOAD_ERR_CANT_WRITE => 'No se pudo escribir el archivo en el disco del servidor.',
+        UPLOAD_ERR_EXTENSION => 'Una extensión de PHP detuvo la subida del archivo.'
+    ];
+    http_response_code(400);
+    echo json_encode(["error" => $errMsgs[$errCode] ?? "Error de subida (Código PHP: $errCode)"]);
+    exit;
+}
+
 if (!isset($_FILES['file'])) {
     http_response_code(400);
-    echo json_encode(["error" => "No file uploaded"]);
+    echo json_encode(["error" => "No se recibió ningún archivo (posiblemente supera el límite post_max_size del servidor)"]);
     exit;
 }
 

@@ -717,28 +717,20 @@ export const SchoolDetailPage: React.FC = () => {
           </div>
 
           {groupVideos.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className={groupVideos.length === 1 ? 'max-w-4xl mx-auto' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'}>
               {groupVideos.map((vid, vIdx) => {
                 const isZip = vid.url.toLowerCase().endsWith('.zip');
-                const isVideoFile = !isZip;
+                const ytMatch = vid.url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+                const vimeoMatch = vid.url.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/([^\/]*)\/videos\/|album\/(\d+)\/video\/|video\/|)(\d+)/i);
+                const isExternalEmbed = Boolean(ytMatch || vimeoMatch);
+                const isVideoFile = !isZip && !isExternalEmbed;
 
                 return (
                   <div
                     key={vid.id || vIdx}
-                    className="glass-card rounded-3xl overflow-hidden border border-zinc-800/40 p-4 bg-zinc-950/80 shadow-premium flex flex-col justify-between space-y-4 hover:border-zinc-700 transition-all"
+                    className="glass-card rounded-3xl overflow-hidden border border-zinc-800/40 p-4 sm:p-5 bg-zinc-950/80 shadow-premium flex flex-col justify-between space-y-4 hover:border-zinc-700 transition-all"
                   >
-                    {isVideoFile ? (
-                      <div className="rounded-2xl overflow-hidden bg-black aspect-video relative group/v">
-                        <video
-                          controls
-                          preload="metadata"
-                          className="w-full h-full object-contain bg-black"
-                          src={toCdnUrl(vid.url)}
-                        >
-                          Tu navegador no soporta la reproducción de video HTML5.
-                        </video>
-                      </div>
-                    ) : (
+                    {isZip ? (
                       <div className="rounded-2xl bg-zinc-900/60 aspect-video flex flex-col items-center justify-center p-4 text-center border border-zinc-800">
                         <Layers size={36} className="text-primary mb-2" />
                         <span className="text-xs font-black uppercase text-zinc-300 tracking-wider">
@@ -748,6 +740,38 @@ export const SchoolDetailPage: React.FC = () => {
                           Descargá el paquete completo
                         </span>
                       </div>
+                    ) : ytMatch ? (
+                      <div className="rounded-2xl overflow-hidden bg-black aspect-video relative border border-zinc-800">
+                        <iframe
+                          src={`https://www.youtube.com/embed/${ytMatch[1]}`}
+                          title={vid.title}
+                          className="w-full h-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      </div>
+                    ) : vimeoMatch ? (
+                      <div className="rounded-2xl overflow-hidden bg-black aspect-video relative border border-zinc-800">
+                        <iframe
+                          src={`https://player.vimeo.com/video/${vimeoMatch[3]}`}
+                          title={vid.title}
+                          className="w-full h-full"
+                          allow="autoplay; fullscreen; picture-in-picture"
+                          allowFullScreen
+                        />
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl overflow-hidden bg-black aspect-video relative group/v border border-zinc-850">
+                        <video
+                          controls
+                          preload="metadata"
+                          playsInline
+                          className="w-full h-full object-contain bg-black"
+                          src={toCdnUrl(vid.url)}
+                        >
+                          Tu navegador no soporta la reproducción de video HTML5.
+                        </video>
+                      </div>
                     )}
 
                     <div className="space-y-3 pt-1">
@@ -756,7 +780,7 @@ export const SchoolDetailPage: React.FC = () => {
                           {vid.title}
                         </h3>
                         <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[9px] font-black uppercase text-primary flex-shrink-0">
-                          {isZip ? 'ZIP' : 'VIDEO'}
+                          {isZip ? 'ZIP' : ytMatch ? 'YOUTUBE' : vimeoMatch ? 'VIMEO' : 'VIDEO'}
                         </span>
                       </div>
 
@@ -765,7 +789,7 @@ export const SchoolDetailPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setPreviewVideoModal({ title: vid.title, url: vid.url })}
-                            className="flex-1 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors"
+                            className="flex-1 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors"
                           >
                             <Play size={12} className="text-primary fill-primary" />
                             Pantalla Completa

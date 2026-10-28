@@ -830,18 +830,20 @@ export const AdminDashboard: React.FC = () => {
         const remotePath = `multimedia/${timestamp}-${cleanName}`;
 
         let videoUrl = '';
-        try {
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('filename', remotePath);
-          const res = await fetch('/upload.php', { method: 'POST', body: formData });
-          const data = await res.json();
-          if (!data.success) throw new Error(data.error || 'Error al subir video');
-          videoUrl = toCdnUrl(data.url);
-        } catch (uploadErr: any) {
-          console.warn('Upload error, using fallback:', uploadErr);
-          videoUrl = `https://demo.backblaze.com/download/viaje-${timestamp}.zip`;
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('filename', remotePath);
+
+        const res = await fetch('/upload.php', { method: 'POST', body: formData });
+        if (!res.ok) {
+          const errText = await res.text();
+          let parsed: any;
+          try { parsed = JSON.parse(errText); } catch {}
+          throw new Error(parsed?.error || `Error ${res.status}: Fallo en el servidor de subida`);
         }
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Error al procesar subida de video');
+        videoUrl = toCdnUrl(data.url);
 
         const newVid: GroupVideo = {
           id: `vid-${timestamp}-${i}`,
@@ -1818,7 +1820,7 @@ export const AdminDashboard: React.FC = () => {
     const totalDownloads = downloadEvents.length;
 
     // 3. Videos cargados
-    const videosCount = schools.filter(s => s.multimedia_url && s.multimedia_url.trim() !== '' && s.multimedia_url !== 'https://demo.backblaze.com/download/viaje.zip').length;
+    const videosCount = schools.filter(s => s.multimedia_url && s.multimedia_url.trim() !== '' && !s.multimedia_url.includes('demo.backblaze.com')).length;
 
     // 4. Espacio en Backblaze B2 (Fórmula matemática detallada en plan)
     // 1.95MB por foto de galería + 150MB por video + 2MB por colegio (grupal web + hd)
@@ -2546,51 +2548,102 @@ export const AdminDashboard: React.FC = () => {
                         </p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[440px] overflow-y-auto pr-1.5 scrollbar-thin">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 max-h-[560px] overflow-y-auto pr-1.5 scrollbar-thin">
                         {groupVideos.map((vid, vIdx) => {
                           const isZip = vid.url.toLowerCase().endsWith('.zip');
-                          const isVideoFile = vid.url.toLowerCase().match(/\.(mp4|webm|mov|m4v)(\?.*)?$/i);
+                          const ytMatch = vid.url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+                          const vimeoMatch = vid.url.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/([^\/]*)\/videos\/|album\/(\d+)\/video\/|video\/|)(\d+)/i);
+                          const isExternalEmbed = Boolean(ytMatch || vimeoMatch);
+                          const isVideoFile = !isZip && !isExternalEmbed;
 
                           return (
                             <div
                               key={vid.id || vIdx}
-                              className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800 hover:border-zinc-700 transition-all space-y-3.5 flex flex-col justify-between"
+                              className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800 hover:border-zinc-700 transition-all space-y-3 flex flex-col justify-between"
                             >
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-primary">
-                                    {isZip ? <Layers size={16} /> : <Film size={16} />}
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="p-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-primary">
+                                    {isZip ? <Layers size={14} /> : <Film size={14} />}
                                   </span>
-                                  <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-zinc-950 text-zinc-400 border border-zinc-850">
-                                    {isZip ? 'ARCHIVO ZIP' : isVideoFile ? 'VIDEO' : 'ENLACE'}
+                                  <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-zinc-950 text-zinc-400 border border-zinc-850 truncate max-w-[150px]">
+                                    {isZip ? 'ARCHIVO ZIP' : ytMatch ? 'YOUTUBE' : vimeoMatch ? 'VIMEO' : 'REPRODUCTOR'}
                                   </span>
                                 </div>
-                                <h4 className="text-sm font-black uppercase text-white tracking-tight line-clamp-1" title={vid.title}>
-                                  {vid.title}
-                                </h4>
-                                <p className="text-[10px] text-zinc-500 font-mono truncate" title={vid.url}>
-                                  {vid.url}
-                                </p>
+
+                                {/* Reproductor de video integrado para chequear */}
+                                {isZip ? (
+                                  <div className="rounded-xl bg-zinc-950/80 aspect-video flex flex-col items-center justify-center p-3 text-center border border-zinc-800/80">
+                                    <Layers size={28} className="text-primary mb-1.5" />
+                                    <span className="text-[11px] font-black uppercase text-zinc-300 tracking-wider">
+                                      Archivo Multimedia (ZIP)
+                                    </span>
+                                    <span className="text-[9px] text-zinc-500 uppercase mt-0.5">
+                                      Descarga de paquete
+                                    </span>
+                                  </div>
+                                ) : ytMatch ? (
+                                  <div className="rounded-xl overflow-hidden bg-black aspect-video relative border border-zinc-800">
+                                    <iframe
+                                      src={`https://www.youtube.com/embed/${ytMatch[1]}`}
+                                      title={vid.title}
+                                      className="w-full h-full"
+                                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                      allowFullScreen
+                                    />
+                                  </div>
+                                ) : vimeoMatch ? (
+                                  <div className="rounded-xl overflow-hidden bg-black aspect-video relative border border-zinc-800">
+                                    <iframe
+                                      src={`https://player.vimeo.com/video/${vimeoMatch[3]}`}
+                                      title={vid.title}
+                                      className="w-full h-full"
+                                      allow="autoplay; fullscreen; picture-in-picture"
+                                      allowFullScreen
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="rounded-xl overflow-hidden bg-black aspect-video relative border border-zinc-800 shadow-inner">
+                                    <video
+                                      controls
+                                      preload="metadata"
+                                      playsInline
+                                      className="w-full h-full object-contain bg-black"
+                                      src={toCdnUrl(vid.url)}
+                                    >
+                                      Tu navegador no soporta la reproducción de video HTML5.
+                                    </video>
+                                  </div>
+                                )}
+
+                                <div className="space-y-0.5">
+                                  <h4 className="text-xs font-black uppercase text-white tracking-tight line-clamp-1" title={vid.title}>
+                                    {vid.title}
+                                  </h4>
+                                  <p className="text-[9px] text-zinc-500 font-mono truncate mt-0.5" title={vid.url}>
+                                    {vid.url}
+                                  </p>
+                                </div>
                               </div>
 
-                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-850/70">
+                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-850/80">
                                 <div className="flex items-center gap-1.5">
                                   {isVideoFile && (
                                     <button
                                       type="button"
                                       onClick={() => setPreviewVideoModal({ title: vid.title, url: vid.url })}
-                                      className="px-3 py-1.5 rounded-lg bg-primary text-black font-black text-[10px] uppercase tracking-wider flex items-center gap-1 hover:bg-primary/95 transition-colors glow-yellow"
+                                      className="px-2.5 py-1.5 rounded-lg bg-primary text-black font-black text-[9px] uppercase tracking-wider flex items-center gap-1 hover:bg-primary/95 transition-colors glow-yellow"
                                     >
-                                      <Play size={11} className="fill-black" />
-                                      Ver
+                                      <Play size={10} className="fill-black" />
+                                      Pop-up
                                     </button>
                                   )}
                                   <button
                                     type="button"
                                     onClick={() => downloadFileDirectly(vid.url, `${vid.title || 'Video'}${isZip ? '.zip' : '.mp4'}`)}
-                                    className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white font-bold text-[10px] uppercase tracking-wider flex items-center gap-1 transition-colors"
+                                    className="px-2.5 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 hover:text-white font-bold text-[9px] uppercase tracking-wider flex items-center gap-1 transition-colors"
                                   >
-                                    <Download size={11} />
+                                    <Download size={10} />
                                     Descargar
                                   </button>
                                 </div>
@@ -2598,7 +2651,7 @@ export const AdminDashboard: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteGroupVideo(vid.id, vid.title)}
-                                  className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/60 text-zinc-500 hover:text-red-400 border border-zinc-800 transition-colors"
+                                  className="p-1.5 rounded-lg bg-zinc-950 hover:bg-red-950/60 text-zinc-500 hover:text-red-400 border border-zinc-800 transition-colors"
                                   title="Eliminar este video"
                                 >
                                   <Trash2 size={13} />
