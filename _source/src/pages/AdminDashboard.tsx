@@ -426,7 +426,8 @@ export const AdminDashboard: React.FC = () => {
         .from('gallery_photos')
         .select('*')
         .eq('school_id', schoolId)
-        .order('sort_order', { ascending: true });
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true });
 
       if (error) throw error;
       
@@ -719,19 +720,24 @@ export const AdminDashboard: React.FC = () => {
   const processGroupPhotosQueue = async (filesToProcess: File[]) => {
     if (!filesToProcess || filesToProcess.length === 0 || !viewingGallerySchool) return;
 
+    // Ordenamiento natural por nombre de archivo (ej: foto_1, foto_2, ... foto_10)
+    const sortedFiles = [...filesToProcess].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+    );
+
     setGroupPhotoUploading(true);
     setGroupPhotoProgress(5);
     setGroupPhotoStatus('Iniciando subida de fotos en cola...');
     setErrorMsg(null);
     setFailedGroupPhotoFiles([]);
 
-    const totalFiles = filesToProcess.length;
+    const totalFiles = sortedFiles.length;
     let completedCount = 0;
     const uploadedPhotos: GalleryPhoto[] = [];
     const failedList: { file: File; name: string; error: string }[] = [];
 
     for (let i = 0; i < totalFiles; i++) {
-      const file = filesToProcess[i];
+      const file = sortedFiles[i];
       setGroupPhotoStatus(`Procesando foto ${i + 1} de ${totalFiles}: ${file.name}`);
 
       try {

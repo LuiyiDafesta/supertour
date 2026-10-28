@@ -160,7 +160,10 @@ export const Uploader: React.FC<UploaderProps> = ({ schoolId, subSchool, default
   const handleFilesAdded = (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    const validFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    // Ordenar naturalmente por nombre de archivo (ej: foto_1, foto_2, ... foto_10)
+    const validFiles = Array.from(files)
+      .filter(f => f.type.startsWith('image/'))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
     if (validFiles.length === 0) return;
 
     const newItems: FileQueueItem[] = validFiles.map((file, idx) => {

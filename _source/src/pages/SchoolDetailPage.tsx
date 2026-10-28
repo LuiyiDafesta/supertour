@@ -204,7 +204,8 @@ export const SchoolDetailPage: React.FC = () => {
           .from('gallery_photos')
           .select('*')
           .eq('school_id', school.id)
-          .order('sort_order', { ascending: true });
+          .order('sort_order', { ascending: true })
+          .order('created_at', { ascending: true });
 
         if (photoError) throw photoError;
 
@@ -919,7 +920,7 @@ export const SchoolDetailPage: React.FC = () => {
         {/* ============================================================== */}
         {/* SECCIÓN 3: GALERÍA DE FOTOS DEL VIAJE (FOTOS DE ACTIVIDADES)   */}
         {/* ============================================================== */}
-        <section className="mb-16 select-none">
+        <section id="seccion-fotos" className="mb-16 select-none scroll-mt-24">
           <div className="text-center md:text-left mb-6">
             <span className="text-xs font-bold text-primary tracking-[0.25em] uppercase glow-text-yellow">
               Galería Flexible

@@ -64,6 +64,21 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
   const [downloadModalOpen, setDownloadModalOpen] = useState<boolean>(false);
   const [targetBatchPhotos, setTargetBatchPhotos] = useState<GalleryPhoto[]>([]);
   const cancelDownloadRef = useRef<boolean>(false);
+  const galleryContainerRef = useRef<HTMLDivElement>(null);
+
+  // Scroll suave al inicio de la galería de fotos al paginar
+  const scrollToGallery = () => {
+    if (galleryContainerRef.current) {
+      const topOffset = galleryContainerRef.current.getBoundingClientRect().top + window.pageYOffset - 90;
+      window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
+    } else {
+      const section = document.getElementById('seccion-fotos') || document.getElementById('galeria-fotos-container');
+      if (section) {
+        const topOffset = section.getBoundingClientRect().top + window.pageYOffset - 90;
+        window.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' });
+      }
+    }
+  };
 
   // Reset page and selection when photo array changes
   useEffect(() => {
@@ -325,7 +340,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
   };
 
   return (
-    <div className="w-full py-12 select-none">
+    <div ref={galleryContainerRef} id="galeria-fotos-container" className="w-full py-12 select-none">
       {/* Gallery Controls (Batch Actions & Grid column switches) */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-zinc-900">
         {/* Left: Bulk Actions */}
@@ -573,13 +588,13 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
                 Mostrando {indexOfFirstPhoto + 1} - {Math.min(indexOfLastPhoto, totalPhotos)} de {totalPhotos} recuerdos
               </span>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center justify-center sm:justify-end gap-1.5 max-w-full">
                 {/* Prev Button */}
                 <button
                   onClick={() => {
                     if (currentPage > 1) {
                       setCurrentPage(currentPage - 1);
-                      window.scrollTo({ top: document.getElementById('destinos')?.offsetTop || 350, behavior: 'smooth' });
+                      scrollToGallery();
                     }
                   }}
                   disabled={currentPage === 1}
@@ -598,7 +613,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
                       key={`gallery-page-${pageNum}`}
                       onClick={() => {
                         setCurrentPage(pageNum);
-                        window.scrollTo({ top: document.getElementById('destinos')?.offsetTop || 350, behavior: 'smooth' });
+                        scrollToGallery();
                       }}
                       className={`w-9.5 h-9.5 rounded-xl text-xs font-black uppercase transition-all tracking-wider ${
                         isActive
@@ -616,7 +631,7 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
                   onClick={() => {
                     if (currentPage < totalPages) {
                       setCurrentPage(currentPage + 1);
-                      window.scrollTo({ top: document.getElementById('destinos')?.offsetTop || 350, behavior: 'smooth' });
+                      scrollToGallery();
                     }
                   }}
                   disabled={currentPage === totalPages}
