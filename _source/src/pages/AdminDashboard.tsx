@@ -517,13 +517,148 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  // --- SUBIDA DE VIDEOS EN FRAGMENTOS (CHUNKS) A BACKBLAZE B2 VÍA UPLOAD_VIDEO.PHP ---
+  // Supera el límite de 100MB de Cloudflare dividiendo el video en partes de 10MB
+  const uploadVideoChunks = async (
+    file: File,
+    remotePath: string,
+    onProgress: (percent: number, statusText: string) => void
+  ): Promise<string> => {
+    const CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
+
+    // Caso 1: Archivos pequeños (< 10 MB): subida directa
+    if (file.size <= CHUNK_SIZE) {
+      onProgress(20, 'Subiendo archivo...');
+      const formData = new FormData();
+      formData.append('action', 'single_upload');
+      formData.append('file', file);
+      formData.append('filename', remotePath);
+
+      const res = await fetch('/upload_video.php', { method: 'POST', body: formData });
+      if (!res.ok) {
+        const errText = await res.text();
+        let parsed: any;
+        try { parsed = JSON.parse(errText); } catch {}
+        throw new Error(parsed?.error || `Error ${res.status}: Fallo en subida`);
+      }
+      const data = await res.json();
+      if (!data.success || !data.url) throw new Error(data.error || 'Error al guardar video');
+      onProgress(100, 'Video cargado con éxito');
+      return data.url;
+    }
+
+    // Caso 2: Archivos grandes (>= 10 MB): subida en partes de 10MB
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    onProgress(5, `Iniciando subida en ${totalChunks} partes...`);
+
+    // Paso A: Iniciar Large File en B2
+    const startForm = new FormData();
+    startForm.append('action', 'start');
+    startForm.append('filename', remotePath);
+    startForm.append('contentType', file.type || 'video/mp4');
+
+    const startRes = await fetch('/upload_video.php', { method: 'POST', body: startForm });
+    if (!startRes.ok) {
+      const errText = await startRes.text();
+      let parsed: any;
+      try { parsed = JSON.parse(errText); } catch {}
+      throw new Error(parsed?.error || `Error al inicializar subida (${startRes.status})`);
+    }
+    const startData = await startRes.json();
+    if (!startData.success || !startData.fileId) {
+      throw new Error(startData.error || 'No se pudo iniciar subida fragmentada');
+    }
+
+    const fileId = startData.fileId;
+    const partSha1Array: string[] = [];
+
+    // Paso B: Subir cada fragmento secuencialmente
+    for (let partIndex = 0; partIndex < totalChunks; partIndex++) {
+      const partNumber = partIndex + 1;
+      const startByte = partIndex * CHUNK_SIZE;
+      const endByte = Math.min(startByte + CHUNK_SIZE, file.size);
+      const chunkBlob = file.slice(startByte, endByte);
+
+      const currentPercent = Math.round(((partIndex) / totalChunks) * 90) + 5;
+      const mbUploaded = (endByte / (1024 * 1024)).toFixed(1);
+      const mbTotal = (file.size / (1024 * 1024)).toFixed(1);
+
+      onProgress(
+        currentPercent,
+        `Subiendo parte ${partNumber}/${totalChunks} (${mbUploaded} MB / ${mbTotal} MB)...`
+      );
+
+      let partSuccess = false;
+      let lastError = '';
+
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const partForm = new FormData();
+          partForm.append('action', 'upload_part');
+          partForm.append('fileId', fileId);
+          partForm.append('partNumber', partNumber.toString());
+          partForm.append('chunk', chunkBlob, `part_${partNumber}.bin`);
+
+          const partRes = await fetch('/upload_video.php', { method: 'POST', body: partForm });
+          if (!partRes.ok) {
+            const errText = await partRes.text();
+            let parsed: any;
+            try { parsed = JSON.parse(errText); } catch {}
+            throw new Error(parsed?.error || `HTTP ${partRes.status}`);
+          }
+          const partData = await partRes.json();
+          if (!partData.success || !partData.sha1) {
+            throw new Error(partData.error || `Error en parte ${partNumber}`);
+          }
+
+          partSha1Array.push(partData.sha1);
+          partSuccess = true;
+          break;
+        } catch (err: any) {
+          lastError = err.message || 'Error desconocido';
+          if (attempt < 3) {
+            onProgress(currentPercent, `Reintentando parte ${partNumber} (intento ${attempt + 1})...`);
+            await new Promise(r => setTimeout(r, 1500));
+          }
+        }
+      }
+
+      if (!partSuccess) {
+        throw new Error(`Falló la subida de la parte ${partNumber}: ${lastError}`);
+      }
+    }
+
+    // Paso C: Finalizar y ensamblar en B2
+    onProgress(95, 'Ensamblando video en CDN...');
+    const finishForm = new FormData();
+    finishForm.append('action', 'finish');
+    finishForm.append('fileId', fileId);
+    finishForm.append('filename', remotePath);
+    finishForm.append('partSha1Array', JSON.stringify(partSha1Array));
+
+    const finishRes = await fetch('/upload_video.php', { method: 'POST', body: finishForm });
+    if (!finishRes.ok) {
+      const errText = await finishRes.text();
+      let parsed: any;
+      try { parsed = JSON.parse(errText); } catch {}
+      throw new Error(parsed?.error || `Error al ensamblar video (${finishRes.status})`);
+    }
+    const finishData = await finishRes.json();
+    if (!finishData.success || !finishData.url) {
+      throw new Error(finishData.error || 'Error al completar ensamblado');
+    }
+
+    onProgress(100, '¡Video ensamblado con éxito!');
+    return finishData.url;
+  };
+
   // Manejador para cargar un video o archivo zip de multimedia a Backblaze B2
   const handleVideoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setVideoUploading(true);
-    setVideoProgress(10);
+    setVideoProgress(5);
     setVideoStatus('Preparando archivo...');
     setErrorMsg(null);
     setSuccessMsg(null);
@@ -533,21 +668,14 @@ export const AdminDashboard: React.FC = () => {
       const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
       const remotePath = `multimedia/${timestamp}-${cleanName}`;
 
-      setVideoProgress(35);
-      setVideoStatus('Subiendo video/zip...');
-
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('filename', remotePath);
-
-      const res = await fetch('/upload.php', { method: 'POST', body: formData });
-      if (!res.ok) throw new Error('Error al subir el archivo multimedia');
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Fallo de subida de video');
+      const videoUrl = await uploadVideoChunks(file, remotePath, (pct, status) => {
+        setVideoProgress(pct);
+        setVideoStatus(status);
+      });
 
       setVideoProgress(100);
       setVideoStatus('Éxito ✅');
-      setMultimediaUrl(toCdnUrl(data.url));
+      setMultimediaUrl(toCdnUrl(videoUrl));
       setSuccessMsg('Archivo multimedia cargado con éxito en CDN / Backblaze B2.');
     } catch (err: any) {
       console.error('Error al procesar video/zip:', err);
@@ -829,21 +957,10 @@ export const AdminDashboard: React.FC = () => {
         const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
         const remotePath = `multimedia/${timestamp}-${cleanName}`;
 
-        let videoUrl = '';
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('filename', remotePath);
-
-        const res = await fetch('/upload.php', { method: 'POST', body: formData });
-        if (!res.ok) {
-          const errText = await res.text();
-          let parsed: any;
-          try { parsed = JSON.parse(errText); } catch {}
-          throw new Error(parsed?.error || `Error ${res.status}: Fallo en el servidor de subida`);
-        }
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error || 'Error al procesar subida de video');
-        videoUrl = toCdnUrl(data.url);
+        const videoUrl = await uploadVideoChunks(file, remotePath, (pct, status) => {
+          setVideoProgress(pct);
+          setVideoStatus(`[Video ${i + 1}/${totalVideos}] ${status}`);
+        });
 
         const newVid: GroupVideo = {
           id: `vid-${timestamp}-${i}`,
@@ -2520,9 +2637,13 @@ export const AdminDashboard: React.FC = () => {
                             <p className="text-xs font-bold text-red-300">
                               {failedVideoFiles.length} video(s) no pudieron completarse en esta vuelta
                             </p>
-                            <p className="text-[10px] text-red-400/80">
-                              {failedVideoFiles.map(f => f.name).join(', ')}
-                            </p>
+                            <div className="space-y-0.5 mt-1">
+                              {failedVideoFiles.map((f, fIdx) => (
+                                <p key={fIdx} className="text-[10px] text-red-400/90 font-medium">
+                                  • <span className="font-bold text-red-300">{f.name}</span>: {f.error}
+                                </p>
+                              ))}
+                            </div>
                           </div>
                         </div>
                         <button
