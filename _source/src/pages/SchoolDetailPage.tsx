@@ -577,7 +577,7 @@ export const SchoolDetailPage: React.FC = () => {
                   className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 font-black text-xs uppercase tracking-wider text-white transition-all duration-300 w-full sm:w-auto"
                 >
                   <Film size={16} className="text-primary" />
-                  Ver Videos ({groupVideos.length})
+                  Ver Video
                 </button>
               </div>
             )}
@@ -701,7 +701,7 @@ export const SchoolDetailPage: React.FC = () => {
         </section>
 
         {/* ============================================================== */}
-        {/* SECCIÓN 2: GALERÍA DE VIDEOS (DEBAJO DE FOTOS GRUPALES)        */}
+        {/* SECCIÓN 2: VIDEO DEL VIAJE (DEBAJO DE FOTOS GRUPALES)          */}
         {/* ============================================================== */}
         <section id="seccion-videos" className="mb-16 select-none animate-fade-in">
           <div className="text-center md:text-left mb-6">
@@ -710,10 +710,10 @@ export const SchoolDetailPage: React.FC = () => {
             </span>
             <h2 className="text-xl sm:text-2xl font-black text-white mt-1 uppercase tracking-tight flex items-center justify-center md:justify-start gap-2">
               <Film size={20} className="text-primary animate-pulse" />
-              {groupVideos.length > 0 ? `Videos del Viaje (${groupVideos.length})` : 'Video del Viaje'}
+              Video del Viaje
             </h2>
             <p className="text-zinc-500 text-xs sm:text-sm mt-1">
-              Mirá y descargá las filmaciones y material multimedia exclusivo de tu grupo de egresados.
+              Mirá y descargá la filmación y material multimedia exclusivo de tu grupo de egresados.
             </p>
           </div>
 
