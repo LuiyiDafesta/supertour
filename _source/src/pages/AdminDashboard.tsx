@@ -21,6 +21,8 @@ import {
   Database,
   Info,
   Check,
+  CheckSquare,
+  Square,
   Search,
   ChevronLeft,
   ChevronRight,
@@ -95,6 +97,7 @@ export const AdminDashboard: React.FC = () => {
   const [viewingGallerySchool, setViewingGallerySchool] = useState<School | null>(null);
   const [galleryPhotos, setGalleryPhotos] = useState<GalleryPhoto[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [selectedAdminPhotoIds, setSelectedAdminPhotoIds] = useState<Set<string>>(new Set());
 
   // Uploader Group Photo States
   const [groupPhotoUploading, setGroupPhotoUploading] = useState(false);
@@ -449,6 +452,7 @@ export const AdminDashboard: React.FC = () => {
   };
 
   useEffect(() => {
+    setSelectedAdminPhotoIds(new Set());
     if (viewingGallerySchool?.id) {
       loadSchoolPhotos(viewingGallerySchool.id);
     }
@@ -1818,13 +1822,150 @@ export const AdminDashboard: React.FC = () => {
           if (error) throw error;
 
           setGalleryPhotos(prev => prev.filter(p => p.id !== photoId));
+          setSelectedAdminPhotoIds(prev => {
+            const next = new Set(prev);
+            next.delete(photoId);
+            return next;
+          });
+          setPhotosCount(prev => Math.max(0, prev - 1));
           toast.success('Foto eliminada de la galería.');
           setSuccessMsg('Foto eliminada de la galería con éxito.');
         } catch (err) {
           console.warn('DB delete photo failed, removing photo from state.');
           setGalleryPhotos(prev => prev.filter(p => p.id !== photoId));
+          setSelectedAdminPhotoIds(prev => {
+            const next = new Set(prev);
+            next.delete(photoId);
+            return next;
+          });
+          setPhotosCount(prev => Math.max(0, prev - 1));
           toast.success('Foto removida localmente.');
           setSuccessMsg('Foto removida del estado local.');
+        }
+      }
+    });
+  };
+
+  // Selección y deselección de fotos en la galería del viaje
+  const togglePhotoSelection = (photoId: string) => {
+    setSelectedAdminPhotoIds(prev => {
+      const next = new Set(prev);
+      if (next.has(photoId)) {
+        next.delete(photoId);
+      } else {
+        next.add(photoId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllTripPhotos = (photos: GalleryPhoto[]) => {
+    const allIds = new Set(photos.map(p => p.id));
+    setSelectedAdminPhotoIds(allIds);
+  };
+
+  const handleDeselectAllTripPhotos = () => {
+    setSelectedAdminPhotoIds(new Set());
+  };
+
+  // Eliminar en cascada las fotos seleccionadas de la galería
+  const handleDeleteSelectedPhotos = () => {
+    if (!viewingGallerySchool) return;
+
+    // Filtrar estrictamente sólo las fotos seleccionadas que pertenezcan a este colegio
+    const photosToDelete = galleryPhotos.filter(
+      p => p.school_id === viewingGallerySchool.id && selectedAdminPhotoIds.has(p.id)
+    );
+
+    if (photosToDelete.length === 0) {
+      toast.error('No hay fotos seleccionadas para eliminar.');
+      return;
+    }
+
+    const groupName = viewingGallerySchool.name || 'Grupo';
+    const totalCount = photosToDelete.length;
+
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Eliminar Fotos Seleccionadas en Cascada',
+      itemTypeBadge: `LOTE: ${totalCount} FOTO${totalCount > 1 ? 'S' : ''}`,
+      itemName: `Grupo: ${groupName}`,
+      description: `¿Estás completamente seguro de que deseas eliminar permanentemente las ${totalCount} fotos seleccionadas de la galería de este grupo?`,
+      warningNotice: `¡ELIMINACIÓN EN CASCADA IRREVERSIBLE! Se borrarán los registros de la base de datos de Supabase y todos los archivos originales HD y optimizados Web de Backblaze B2, única y exclusivamente pertenecientes a "${groupName}".`,
+      confirmButtonText: `Sí, Eliminar ${totalCount} Foto${totalCount > 1 ? 's' : ''}`,
+      onConfirm: async () => {
+        const schoolId = viewingGallerySchool.id;
+        const deletedIds = new Set(photosToDelete.map(p => p.id));
+
+        // 1. Recolectar URLs de Backblaze B2 (Web y HD)
+        const urlsToDelete: string[] = [];
+        photosToDelete.forEach(p => {
+          if (p.url_web) urlsToDelete.push(p.url_web);
+          if (p.url_hd) urlsToDelete.push(p.url_hd);
+        });
+
+        // 2. Eliminar de Backblaze B2 en bloques de 30 URLs para evitar timeouts cURL en servidor
+        if (urlsToDelete.length > 0) {
+          const b2ChunkSize = 30;
+          for (let i = 0; i < urlsToDelete.length; i += b2ChunkSize) {
+            const chunk = urlsToDelete.slice(i, i + b2ChunkSize);
+            await deleteFromB2(chunk);
+          }
+        }
+
+        // 3. Si alguna de las fotos eliminadas era la portada del colegio, actualizarla
+        const wasCoverDeleted = photosToDelete.some(p =>
+          (p.url_web && (p.url_web === viewingGallerySchool.group_photo_web || toCdnUrl(p.url_web) === toCdnUrl(viewingGallerySchool.group_photo_web))) ||
+          (p.url_hd && (p.url_hd === viewingGallerySchool.group_photo_hd || toCdnUrl(p.url_hd) === toCdnUrl(viewingGallerySchool.group_photo_hd)))
+        );
+
+        const remainingPhotos = galleryPhotos.filter(p => !deletedIds.has(p.id));
+
+        if (wasCoverDeleted) {
+          const nextCover = remainingPhotos.find(p => p.category === 'Grupal') || remainingPhotos[0];
+          const newWeb = nextCover ? toCdnUrl(nextCover.url_web) : '';
+          const newHd = nextCover ? toCdnUrl(nextCover.url_hd) : '';
+          try {
+            await supabase.from('schools').update({ group_photo_web: newWeb, group_photo_hd: newHd }).eq('id', schoolId);
+          } catch (coverErr) {
+            console.warn('No se pudo actualizar portada tras borrado masivo:', coverErr);
+          }
+          setViewingGallerySchool(prev => prev ? { ...prev, group_photo_web: newWeb, group_photo_hd: newHd } : null);
+          setSchools(prev => prev.map(s => s.id === schoolId ? { ...s, group_photo_web: newWeb, group_photo_hd: newHd } : s));
+        }
+
+        // 4. Eliminar de Supabase en bloques de 100 IDs garantizando school_id
+        const photoIdsList = Array.from(deletedIds);
+        const dbChunkSize = 100;
+        let dbDeleteError = false;
+
+        for (let i = 0; i < photoIdsList.length; i += dbChunkSize) {
+          const chunkIds = photoIdsList.slice(i, i + dbChunkSize);
+          try {
+            const { error } = await supabase
+              .from('gallery_photos')
+              .delete()
+              .eq('school_id', schoolId)
+              .in('id', chunkIds);
+            if (error) {
+              console.error('Error eliminando lote de fotos en Supabase:', error);
+              dbDeleteError = true;
+            }
+          } catch (dbErr) {
+            console.error('Excepción al eliminar lote en Supabase:', dbErr);
+            dbDeleteError = true;
+          }
+        }
+
+        // 5. Actualizar estado local
+        setGalleryPhotos(prev => prev.filter(p => !deletedIds.has(p.id)));
+        setSelectedAdminPhotoIds(new Set());
+        setPhotosCount(prev => Math.max(0, prev - totalCount));
+
+        if (dbDeleteError) {
+          toast.warning(`Se procesaron ${totalCount} fotos (algunas eliminadas localmente y de B2).`);
+        } else {
+          toast.success(`${totalCount} foto(s) eliminada(s) en cascada de Supabase y Backblaze B2.`);
         }
       }
     });
@@ -2834,38 +2975,144 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                     ) : (
                       <div className="space-y-3 pt-2">
-                        <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
-                          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
-                            Fotos Registradas ({tripPhotos.length})
-                          </span>
+                        {/* Barra de Herramientas y Acciones Múltiples */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-900 pb-3">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-[11px] font-black uppercase tracking-widest text-zinc-300">
+                              Fotos Registradas ({tripPhotos.length})
+                            </span>
+                            {selectedAdminPhotoIds.size > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-primary/20 border border-primary/40 text-primary text-[10px] font-black uppercase tracking-wider animate-fade-in">
+                                <Check size={11} className="stroke-[3]" />
+                                {selectedAdminPhotoIds.size} seleccionada{selectedAdminPhotoIds.size > 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            {selectedAdminPhotoIds.size < tripPhotos.length ? (
+                              <button
+                                type="button"
+                                onClick={() => handleSelectAllTripPhotos(tripPhotos)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white text-xs font-bold uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-sm"
+                                title="Seleccionar todas las fotos de este grupo"
+                              >
+                                <CheckSquare size={13} className="text-primary" />
+                                <span>Seleccionar Todas ({tripPhotos.length})</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={handleDeselectAllTripPhotos}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white text-xs font-bold uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-sm"
+                                title="Deseleccionar todas"
+                              >
+                                <Square size={13} />
+                                <span>Deseleccionar Todas</span>
+                              </button>
+                            )}
+
+                            {selectedAdminPhotoIds.size > 0 && (
+                              <>
+                                {selectedAdminPhotoIds.size < tripPhotos.length && (
+                                  <button
+                                    type="button"
+                                    onClick={handleDeselectAllTripPhotos}
+                                    className="px-2.5 py-1.5 rounded-xl text-zinc-500 hover:text-zinc-300 text-xs font-bold uppercase tracking-wider transition-colors"
+                                  >
+                                    Limpiar
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={handleDeleteSelectedPhotos}
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-wider transition-all duration-200 active:scale-95 shadow-lg shadow-red-950/50"
+                                  title="Eliminar en cascada las fotos seleccionadas"
+                                >
+                                  <Trash2 size={13} />
+                                  <span>Eliminar Seleccionadas ({selectedAdminPhotoIds.size})</span>
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-[460px] overflow-y-auto pr-1.5 scrollbar-thin">
-                          {tripPhotos.map((photo, idx) => (
-                            <div key={photo.id || idx} className="group relative aspect-square rounded-xl overflow-hidden border border-zinc-850 bg-zinc-900/20">
-                              <img src={toCdnUrl(photo.url_web || photo.url_hd)} alt="galería viaje" className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex flex-col justify-between p-2.5 transition-opacity">
-                                <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">#{idx + 1}</span>
-                                <div className="flex justify-end gap-1 mt-auto">
-                                  <button
-                                    type="button"
-                                    onClick={() => setPreviewPhotoModal(photo)}
-                                    className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white flex items-center justify-center transition-colors"
-                                    title="Ver foto"
-                                  >
-                                    <ZoomIn size={12} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeletePhoto(photo.id)}
-                                    className="w-7 h-7 rounded-lg bg-red-950/80 hover:bg-red-600 border border-red-900 text-red-300 hover:text-white flex items-center justify-center transition-colors"
-                                    title="Eliminar Foto"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
+
+                        {/* Grilla de Miniaturas */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-[500px] overflow-y-auto pr-1.5 scrollbar-thin">
+                          {tripPhotos.map((photo, idx) => {
+                            const isSelected = selectedAdminPhotoIds.has(photo.id);
+                            return (
+                              <div
+                                key={photo.id || idx}
+                                onClick={() => togglePhotoSelection(photo.id)}
+                                className={`group relative aspect-square rounded-xl overflow-hidden border cursor-pointer transition-all duration-200 select-none ${
+                                  isSelected
+                                    ? 'border-primary ring-2 ring-primary/80 bg-primary/10 shadow-[0_0_15px_rgba(250,204,21,0.25)]'
+                                    : 'border-zinc-850 bg-zinc-900/20 hover:border-zinc-700'
+                                }`}
+                              >
+                                <img
+                                  src={toCdnUrl(photo.url_web || photo.url_hd)}
+                                  alt="galería viaje"
+                                  className={`w-full h-full object-cover transition-transform duration-300 ${isSelected ? 'scale-[0.96] opacity-90' : 'group-hover:scale-105'}`}
+                                  loading="lazy"
+                                />
+
+                                {/* Checkbox permanente si está seleccionado, o visible al hover */}
+                                <div
+                                  className={`absolute top-2 left-2 z-20 w-6 h-6 rounded-md flex items-center justify-center transition-all ${
+                                    isSelected
+                                      ? 'bg-primary text-black shadow-md ring-1 ring-black/40'
+                                      : 'bg-black/60 border border-white/20 text-white/40 group-hover:border-white/60 group-hover:text-white/80 opacity-0 group-hover:opacity-100'
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    togglePhotoSelection(photo.id);
+                                  }}
+                                  title={isSelected ? 'Deseleccionar' : 'Seleccionar'}
+                                >
+                                  {isSelected ? (
+                                    <Check size={14} className="stroke-[3]" />
+                                  ) : (
+                                    <Square size={13} />
+                                  )}
+                                </div>
+
+                                {/* Overlay con índice y botones de acción */}
+                                <div
+                                  className={`absolute inset-0 bg-black/75 flex flex-col justify-between p-2.5 transition-opacity ${
+                                    isSelected ? 'opacity-100 bg-black/40' : 'opacity-0 group-hover:opacity-100'
+                                  }`}
+                                >
+                                  <div className="flex justify-between items-start">
+                                    <div />
+                                    <span className="text-[8px] font-black text-white/90 bg-black/60 px-1.5 py-0.5 rounded backdrop-blur-sm uppercase tracking-widest">
+                                      #{idx + 1}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex justify-end gap-1 mt-auto z-10" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewPhotoModal(photo)}
+                                      className="w-7 h-7 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 text-white flex items-center justify-center transition-colors shadow-sm"
+                                      title="Ver foto en tamaño completo"
+                                    >
+                                      <ZoomIn size={12} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeletePhoto(photo.id)}
+                                      className="w-7 h-7 rounded-lg bg-red-950/80 hover:bg-red-600 border border-red-900 text-red-300 hover:text-white flex items-center justify-center transition-colors shadow-sm"
+                                      title="Eliminar esta foto individual"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
