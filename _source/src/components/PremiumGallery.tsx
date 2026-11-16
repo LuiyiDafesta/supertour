@@ -7,7 +7,7 @@ import {
   downloadPhotosSequentially 
 } from '../lib/downloader';
 import { trackEvent } from '../lib/analytics';
-import { toCdnUrl, handleCdnImageError } from '../lib/cdn';
+import { toCdnUrl } from '../lib/cdn';
 import { toast } from 'sonner';
 import { 
   Download, 
@@ -513,7 +513,6 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
                   {/* Image element */}
                   <img
                     src={toCdnUrl(photo.url_web)}
-                    onError={handleCdnImageError}
                     alt={`${schoolName} - Recuerdos`}
                     loading="lazy"
                     className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
@@ -890,7 +889,6 @@ export const PremiumGallery: React.FC<PremiumGalleryProps> = ({ photos, schoolNa
           >
             <img
               src={toCdnUrl(photos[lightboxIndex].url_hd)}
-              onError={handleCdnImageError}
               alt={`${schoolName} - Lightbox`}
               className={`max-w-full max-h-full object-contain rounded-lg transition-transform duration-300 ${
                 isZoomed ? 'scale-150 cursor-zoom-out' : 'scale-100 cursor-zoom-in'

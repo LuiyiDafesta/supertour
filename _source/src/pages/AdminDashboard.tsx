@@ -6,7 +6,7 @@ import { School, GalleryPhoto, SchoolItem, GroupVideo, Survey, normalizeSurvey }
 import { Navbar } from '../components/Navbar';
 import { Uploader } from '../components/Uploader';
 import { getAnalyticsEvents, AnalyticsEvent } from '../lib/analytics';
-import { toCdnUrl, normalizeSchoolWithCdn, normalizeGalleryPhotoWithCdn, getSchoolVideos, deleteFromB2, handleCdnImageError } from '../lib/cdn';
+import { toCdnUrl, normalizeSchoolWithCdn, normalizeGalleryPhotoWithCdn, getSchoolVideos, deleteFromB2 } from '../lib/cdn';
 import { downloadFileDirectly } from '../lib/downloader';
 import { 
   Plus, 
@@ -2554,7 +2554,6 @@ export const AdminDashboard: React.FC = () => {
                               <div className="aspect-[16/10] w-full overflow-hidden relative bg-black">
                                 <img
                                   src={toCdnUrl(photo.url_web || photo.url_hd)}
-                                  onError={handleCdnImageError}
                                   alt={`Foto Grupal #${idx + 1}`}
                                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                 />
@@ -3054,7 +3053,6 @@ export const AdminDashboard: React.FC = () => {
                               >
                                 <img
                                   src={toCdnUrl(photo.url_web || photo.url_hd)}
-                                  onError={handleCdnImageError}
                                   alt="galería viaje"
                                   className={`w-full h-full object-cover transition-transform duration-300 ${isSelected ? 'scale-[0.96] opacity-90' : 'group-hover:scale-105'}`}
                                   loading="lazy"
@@ -4571,7 +4569,6 @@ export const AdminDashboard: React.FC = () => {
             <div className="flex-1 overflow-auto p-2 flex items-center justify-center bg-black/60">
               <img
                 src={toCdnUrl(previewPhotoModal.url_hd || previewPhotoModal.url_web)}
-                onError={handleCdnImageError}
                 alt="Vista completa"
                 className="max-h-[75vh] w-auto max-w-full object-contain rounded-xl"
               />
