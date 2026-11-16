@@ -11,15 +11,69 @@
 
 export const CDN_DOMAIN = 'https://media.supertourchannel.com.ar';
 
+let cdnOffline = false;
+
+export const isCdnOffline = (): boolean => cdnOffline;
+
+export const markCdnOffline = (): void => {
+  if (!cdnOffline) {
+    cdnOffline = true;
+    console.warn('[CDN Fallback] Cloudflare no disponible o límite de cuota superado (Error 1027). Conmutando a Backblaze B2 directo.');
+  }
+};
+
+/**
+ * Obtiene la URL directa de Backblaze B2 a partir de cualquier URL del CDN o B2.
+ */
+export const getDirectB2Url = (url?: string | null): string => {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (trimmed === '') return '';
+
+  if (trimmed.includes('media.supertourchannel.com.ar/')) {
+    return trimmed.replace(/https?:\/\/media\.supertourchannel\.com\.ar\//i, 'https://f004.backblazeb2.com/file/');
+  }
+  return trimmed;
+};
+
+/**
+ * Manejador onError para elementos <img>: si una imagen falló al cargar desde el CDN
+ * (por ejemplo HTTP 429 por límite diario de Cloudflare Workers), conmuta de inmediato
+ * a Backblaze B2 directo y activa el fallback global para el resto de la sesión.
+ */
+export const handleCdnImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>): void => {
+  const img = e.currentTarget;
+  const currentSrc = img.src;
+  if (currentSrc && currentSrc.includes('media.supertourchannel.com.ar/')) {
+    markCdnOffline();
+    img.src = currentSrc.replace(/https?:\/\/media\.supertourchannel\.com\.ar\//i, 'https://f004.backblazeb2.com/file/');
+  }
+};
+
+// Sonda proactiva ligera para detectar si Cloudflare está bloqueado por Error 1027
+if (typeof window !== 'undefined') {
+  const probe = new Image();
+  probe.onerror = () => {
+    markCdnOffline();
+  };
+  probe.src = 'https://media.supertourchannel.com.ar/SupertourLow/group-photos/web/1794861781059-02_SUPERTOUR_3.jpg';
+}
+
 /**
  * Transforma cualquier URL de origen directo de Backblaze B2 en su correspondiente ruta CDN Cloudflare.
- * Si la URL ya utiliza el CDN, o es un enlace externo (ej. Unsplash, demo), la mantiene intacta.
+ * Si el CDN está indisponible o con cuota agotada, o si la URL ya utiliza el CDN mientras está offline,
+ * conmuta automáticamente a Backblaze B2 directo.
  */
 export const toCdnUrl = (url?: string | null): string => {
   if (!url || typeof url !== 'string') return '';
 
   const trimmed = url.trim();
   if (trimmed === '') return '';
+
+  // Si el CDN está caído/limitado, conmutar directamente a Backblaze B2
+  if (cdnOffline) {
+    return getDirectB2Url(trimmed);
+  }
 
   // Si ya apunta a nuestro CDN, mantenerlo tal cual
   if (trimmed.includes('media.supertourchannel.com.ar')) {

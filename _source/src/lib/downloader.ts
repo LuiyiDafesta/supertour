@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { toCdnUrl } from './cdn';
+import { toCdnUrl, getDirectB2Url, markCdnOffline } from './cdn';
 
 /**
  * Descarga directamente un objeto Blob en el navegador,
@@ -32,13 +32,27 @@ export const downloadBlobDirectly = (blob: Blob, filename: string): void => {
  * @param filename El nombre del archivo con el que se guardará en el explorador.
  */
 export const downloadFileDirectly = async (url: string, filename: string): Promise<void> => {
-  const targetUrl = toCdnUrl(url);
+  let targetUrl = toCdnUrl(url);
   try {
-    const response = await fetch(targetUrl, {
+    let response = await fetch(targetUrl, {
       method: 'GET',
       mode: 'cors',
       credentials: 'omit'
     });
+
+    // Si el CDN falla (ej: HTTP 429 por límite Cloudflare), conmutar a Backblaze B2 directo
+    if (!response.ok) {
+      markCdnOffline();
+      const fallbackUrl = getDirectB2Url(targetUrl);
+      if (fallbackUrl !== targetUrl) {
+        response = await fetch(fallbackUrl, {
+          method: 'GET',
+          mode: 'cors',
+          credentials: 'omit'
+        });
+        targetUrl = fallbackUrl;
+      }
+    }
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -48,8 +62,8 @@ export const downloadFileDirectly = async (url: string, filename: string): Promi
     downloadBlobDirectly(blob, filename);
   } catch (error) {
     console.warn('Descarga por Blob falló debido a políticas CORS o de red, usando fallback clásico de pestaña:', error);
-    // Fallback: abrir en una pestaña nueva
-    window.open(targetUrl, '_blank');
+    // Fallback: abrir en una pestaña nueva con URL directa de B2
+    window.open(getDirectB2Url(targetUrl), '_blank');
   }
 };
 
@@ -79,15 +93,26 @@ export const downloadPhotosAsZip = async (
       return { success: false, count };
     }
 
-    const item = items[i];
-    const targetUrl = toCdnUrl(item.url);
+    let targetUrl = toCdnUrl(item.url);
 
     try {
-      const response = await fetch(targetUrl, {
+      let response = await fetch(targetUrl, {
         method: 'GET',
         mode: 'cors',
         credentials: 'omit'
       });
+
+      if (!response.ok) {
+        markCdnOffline();
+        const fallbackUrl = getDirectB2Url(targetUrl);
+        if (fallbackUrl !== targetUrl) {
+          response = await fetch(fallbackUrl, {
+            method: 'GET',
+            mode: 'cors',
+            credentials: 'omit'
+          });
+        }
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
